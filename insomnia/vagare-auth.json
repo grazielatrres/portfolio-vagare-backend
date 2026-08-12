@@ -1,0 +1,254 @@
+{
+  "_type": "export",
+  "__export_format": 4,
+  "__export_date": "2026-03-12T19:00:00.000Z",
+  "__export_source": "vagare-backend:auth",
+  "resources": [
+    {
+      "_id": "wrk_vagare",
+      "_type": "workspace",
+      "parentId": null,
+      "name": "Vagare API",
+      "description": "Collection do backend Vagare — módulo de autenticação",
+      "scope": "collection"
+    },
+    {
+      "_id": "env_vagare_base",
+      "_type": "environment",
+      "parentId": "wrk_vagare",
+      "name": "Base Environment",
+      "data": {
+        "base_url": "http://localhost:3000",
+        "jwt": ""
+      },
+      "dataPropertyOrder": {
+        "&": ["base_url", "jwt"]
+      },
+      "color": null,
+      "isPrivate": false,
+      "metaSortKey": 1
+    },
+    {
+      "_id": "fld_auth",
+      "_type": "request_group",
+      "parentId": "wrk_vagare",
+      "name": "Auth",
+      "description": "Endpoints de autenticação (register, login, google)",
+      "environment": {},
+      "environmentPropertyOrder": null,
+      "metaSortKey": -3
+    },
+    {
+      "_id": "fld_health",
+      "_type": "request_group",
+      "parentId": "wrk_vagare",
+      "name": "Health",
+      "description": "Health check da API",
+      "environment": {},
+      "environmentPropertyOrder": null,
+      "metaSortKey": -4
+    },
+    {
+      "_id": "fld_protected",
+      "_type": "request_group",
+      "parentId": "wrk_vagare",
+      "name": "Protected (exemplo)",
+      "description": "Exemplo de rota autenticada com Bearer JWT. Use após login/register — cole o token em base_url env → jwt, ou use a variável {% response %} se preferir.",
+      "environment": {},
+      "environmentPropertyOrder": null,
+      "metaSortKey": -2
+    },
+    {
+      "_id": "req_health",
+      "_type": "request",
+      "parentId": "fld_health",
+      "name": "Health Check",
+      "description": "Verifica se a API está no ar",
+      "url": "{{ _.base_url }}/health",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {},
+      "metaSortKey": -1,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_id": "req_register",
+      "_type": "request",
+      "parentId": "fld_auth",
+      "name": "Register",
+      "description": "POST /auth/register — cria usuário local e retorna JWT",
+      "url": "{{ _.base_url }}/auth/register",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"Maria Silva\",\n  \"email\": \"maria@example.com\",\n  \"password\": \"senha123\"\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "authentication": {},
+      "metaSortKey": -3,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_id": "req_login",
+      "_type": "request",
+      "parentId": "fld_auth",
+      "name": "Login",
+      "description": "POST /auth/login — autentica e retorna JWT",
+      "url": "{{ _.base_url }}/auth/login",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"email\": \"maria@example.com\",\n  \"password\": \"senha123\"\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "authentication": {},
+      "metaSortKey": -2,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_id": "req_google",
+      "_type": "request",
+      "parentId": "fld_auth",
+      "name": "Login Google",
+      "description": "POST /auth/google — envia o id_token do Google. Substitua o valor de token pelo ID Token real obtido no front/Google.",
+      "url": "{{ _.base_url }}/auth/google",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"token\": \"COLE_AQUI_O_ID_TOKEN_DO_GOOGLE\"\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "authentication": {},
+      "metaSortKey": -1,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_id": "req_register_short_password",
+      "_type": "request",
+      "parentId": "fld_auth",
+      "name": "Register — senha curta (400)",
+      "description": "Cenário de erro: senha com menos de 6 caracteres",
+      "url": "{{ _.base_url }}/auth/register",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"Teste\",\n  \"email\": \"teste-curto@example.com\",\n  \"password\": \"12345\"\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_id": "req_login_invalid",
+      "_type": "request",
+      "parentId": "fld_auth",
+      "name": "Login — credenciais inválidas (401)",
+      "description": "Cenário de erro: e-mail/senha incorretos (mensagem genérica)",
+      "url": "{{ _.base_url }}/auth/login",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"email\": \"maria@example.com\",\n  \"password\": \"senha-errada\"\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "authentication": {},
+      "metaSortKey": 1,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_id": "req_auth_example",
+      "_type": "request",
+      "parentId": "fld_protected",
+      "name": "Exemplo Bearer (cole o JWT em jwt)",
+      "description": "Após Register/Login, copie o campo token da resposta e cole na variável de ambiente jwt. Esta request só demonstra o header Authorization — ainda não há rota protegida além do middleware pronto.",
+      "url": "{{ _.base_url }}/health",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ _.jwt }}"
+        }
+      ],
+      "authentication": {},
+      "metaSortKey": -1,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    }
+  ]
+}
