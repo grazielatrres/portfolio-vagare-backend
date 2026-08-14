@@ -1,6 +1,10 @@
 import { Trip } from '@prisma/client';
 
-export function buildTrip(overrides: Partial<Trip> = {}): Trip {
+type TripFactoryOverrides = Partial<Trip> & {
+  numberOfPeople?: number | null;
+};
+
+export function buildTrip(overrides: TripFactoryOverrides = {}): Trip {
   const now = new Date();
   return {
     id: 'trip-1',

@@ -53,7 +53,12 @@ describe('TripService', () => {
         startDate: new Date('2026-09-01'),
         endDate: new Date('2026-09-01'),
       };
-      tripRepository.create.mockResolvedValue(buildTrip(sameDay));
+      tripRepository.create.mockResolvedValue(
+        buildTrip({
+          startDate: sameDay.startDate,
+          endDate: sameDay.endDate,
+        }),
+      );
 
       await tripService.createTrip('user-1', sameDay);
 
