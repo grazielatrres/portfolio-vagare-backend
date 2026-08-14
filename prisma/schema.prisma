@@ -32,19 +32,20 @@ model User {
 }
 
 model Trip {
-  id          String     @id @default(uuid())
-  userId      String     @map("user_id")
-  name        String
-  destination String
-  startDate   DateTime   @map("start_date") @db.Date
-  endDate     DateTime   @map("end_date") @db.Date
-  budget      Decimal?   @db.Decimal(12, 2)
-  createdAt   DateTime   @default(now()) @map("created_at")
-  updatedAt   DateTime   @updatedAt @map("updated_at")
-  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  activities  Activity[]
-  expenses    Expense[]
-  infos       Info[]
+  id             String     @id @default(uuid())
+  userId         String     @map("user_id")
+  name           String
+  destination    String
+  startDate      DateTime   @map("start_date") @db.Date
+  endDate        DateTime   @map("end_date") @db.Date
+  budget         Decimal?   @db.Decimal(12, 2)
+  numberOfPeople Int?       @map("number_of_people")
+  createdAt      DateTime   @default(now()) @map("created_at")
+  updatedAt      DateTime   @updatedAt @map("updated_at")
+  user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activities     Activity[]
+  expenses       Expense[]
+  infos          Info[]
 
   @@index([userId])
   @@map("trips")

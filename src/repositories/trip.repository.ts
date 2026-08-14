@@ -7,15 +7,10 @@ export interface CreateTripData {
   startDate: Date;
   endDate: Date;
   budget?: Prisma.Decimal | number | null;
+  numberOfPeople?: number | null;
 }
 
-export interface UpdateTripData {
-  name?: string;
-  destination?: string;
-  startDate?: Date;
-  endDate?: Date;
-  budget?: Prisma.Decimal | number | null;
-}
+export type UpdateTripData = Partial<CreateTripData>;
 
 export class TripRepository {
   async create(userId: string, data: CreateTripData): Promise<Trip> {
@@ -27,6 +22,7 @@ export class TripRepository {
         startDate: data.startDate,
         endDate: data.endDate,
         budget: data.budget ?? null,
+        numberOfPeople: data.numberOfPeople ?? null,
       },
     });
   }
@@ -58,6 +54,7 @@ export class TripRepository {
         ...(data.startDate !== undefined && { startDate: data.startDate }),
         ...(data.endDate !== undefined && { endDate: data.endDate }),
         ...(data.budget !== undefined && { budget: data.budget }),
+        ...(data.numberOfPeople !== undefined && { numberOfPeople: data.numberOfPeople }),
       },
     });
   }

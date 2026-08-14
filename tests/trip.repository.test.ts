@@ -1,8 +1,6 @@
-// trip.repository.test.ts — RF08, RN01, RN10
-
-import { Trip } from '@prisma/client';
 import { prisma } from '../src/config/prisma';
 import { TripRepository } from '../src/repositories/trip.repository';
+import { buildTrip } from './helpers/trip.factory';
 
 jest.mock('../src/config/prisma', () => ({
   prisma: {
@@ -24,22 +22,6 @@ const prismaTrip = prisma.trip as unknown as {
   delete: jest.Mock;
 };
 
-function buildTrip(overrides: Partial<Trip> = {}): Trip {
-  const now = new Date();
-  return {
-    id: 'trip-1',
-    userId: 'user-1',
-    name: 'Férias em Florença',
-    destination: 'Florença, Itália',
-    startDate: new Date('2026-09-01'),
-    endDate: new Date('2026-09-10'),
-    budget: null,
-    createdAt: now,
-    updatedAt: now,
-    ...overrides,
-  };
-}
-
 describe('TripRepository', () => {
   const repository = new TripRepository();
   const userId = 'user-1';
@@ -54,8 +36,7 @@ describe('TripRepository', () => {
         endDate: new Date('2026-09-10'),
         budget: 5000,
       };
-      const created = buildTrip({ budget: data.budget as unknown as Trip['budget'] });
-      prismaTrip.create.mockResolvedValue(created);
+      prismaTrip.create.mockResolvedValue(buildTrip());
 
       const result = await repository.create(userId, data);
 
@@ -67,6 +48,7 @@ describe('TripRepository', () => {
           startDate: data.startDate,
           endDate: data.endDate,
           budget: data.budget,
+          numberOfPeople: null,
         },
       });
       expect(result.userId).toBe(userId);
