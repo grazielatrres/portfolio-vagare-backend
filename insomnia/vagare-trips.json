@@ -1,0 +1,255 @@
+{
+  "_type": "export",
+  "__export_format": 4,
+  "__export_date": "2026-08-14T19:00:00.000Z",
+  "__export_source": "vagare-backend:trips",
+  "resources": [
+    {
+      "_id": "wrk_vagare_trips",
+      "_type": "workspace",
+      "parentId": null,
+      "name": "Vagare API — Trips",
+      "description": "Fluxo manual: registrar → login → criar → listar → editar → excluir viagem",
+      "scope": "collection"
+    },
+    {
+      "_id": "env_vagare_trips",
+      "_type": "environment",
+      "parentId": "wrk_vagare_trips",
+      "name": "Base Environment",
+      "data": {
+        "base_url": "http://localhost:3000",
+        "jwt": "",
+        "trip_id": ""
+      },
+      "dataPropertyOrder": {
+        "&": ["base_url", "jwt", "trip_id"]
+      },
+      "color": null,
+      "isPrivate": false,
+      "metaSortKey": 1
+    },
+    {
+      "_id": "fld_auth_flow",
+      "_type": "request_group",
+      "parentId": "wrk_vagare_trips",
+      "name": "1. Auth",
+      "description": "Passo 1–2: registre um usuário e faça login. Copie o campo token da resposta para a variável jwt.",
+      "environment": {},
+      "environmentPropertyOrder": null,
+      "metaSortKey": -3
+    },
+    {
+      "_id": "fld_trips_flow",
+      "_type": "request_group",
+      "parentId": "wrk_vagare_trips",
+      "name": "2. Trips",
+      "description": "Passo 3–6: CRUD de viagens (Bearer jwt obrigatório). Após criar, copie o id da resposta para trip_id.",
+      "environment": {},
+      "environmentPropertyOrder": null,
+      "metaSortKey": -2
+    },
+    {
+      "_id": "req_flow_register",
+      "_type": "request",
+      "parentId": "fld_auth_flow",
+      "name": "1. Register",
+      "description": "POST /auth/register — cria usuário e retorna JWT. Cole token em jwt.",
+      "url": "{{ _.base_url }}/auth/register",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"Maria Silva\",\n  \"email\": \"maria@example.com\",\n  \"password\": \"senha123\"\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "authentication": {},
+      "metaSortKey": -4,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_id": "req_flow_login",
+      "_type": "request",
+      "parentId": "fld_auth_flow",
+      "name": "2. Login",
+      "description": "POST /auth/login — autentica e retorna JWT. Cole token em jwt.",
+      "url": "{{ _.base_url }}/auth/login",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"email\": \"maria@example.com\",\n  \"password\": \"senha123\"\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "authentication": {},
+      "metaSortKey": -3,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_id": "req_flow_create_trip",
+      "_type": "request",
+      "parentId": "fld_trips_flow",
+      "name": "3. Create trip",
+      "description": "POST /trips — cria viagem (201). Cole o id da resposta em trip_id.",
+      "url": "{{ _.base_url }}/trips",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"Férias em Florença\",\n  \"destination\": \"Florença, Itália\",\n  \"startDate\": \"2026-09-01\",\n  \"endDate\": \"2026-09-10\",\n  \"budget\": 5000,\n  \"numberOfPeople\": 2\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        },
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ _.jwt }}"
+        }
+      ],
+      "authentication": {},
+      "metaSortKey": -4,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_id": "req_flow_list_trips",
+      "_type": "request",
+      "parentId": "fld_trips_flow",
+      "name": "4. List trips",
+      "description": "GET /trips — lista viagens do usuário autenticado (200).",
+      "url": "{{ _.base_url }}/trips",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ _.jwt }}"
+        }
+      ],
+      "authentication": {},
+      "metaSortKey": -3,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_id": "req_flow_get_trip",
+      "_type": "request",
+      "parentId": "fld_trips_flow",
+      "name": "5. Get trip by id",
+      "description": "GET /trips/:id — detalhe da viagem (200). Use trip_id da criação.",
+      "url": "{{ _.base_url }}/trips/{{ _.trip_id }}",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ _.jwt }}"
+        }
+      ],
+      "authentication": {},
+      "metaSortKey": -2,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_id": "req_flow_update_trip",
+      "_type": "request",
+      "parentId": "fld_trips_flow",
+      "name": "6. Update trip",
+      "description": "PUT /trips/:id — edita viagem (200).",
+      "url": "{{ _.base_url }}/trips/{{ _.trip_id }}",
+      "method": "PUT",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"Toscana 2026\",\n  \"destination\": \"Florença, Itália\",\n  \"startDate\": \"2026-09-01\",\n  \"endDate\": \"2026-09-12\",\n  \"budget\": 6500,\n  \"numberOfPeople\": 3\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        },
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ _.jwt }}"
+        }
+      ],
+      "authentication": {},
+      "metaSortKey": -1,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_id": "req_flow_delete_trip",
+      "_type": "request",
+      "parentId": "fld_trips_flow",
+      "name": "7. Delete trip",
+      "description": "DELETE /trips/:id — exclui viagem (204 sem body).",
+      "url": "{{ _.base_url }}/trips/{{ _.trip_id }}",
+      "method": "DELETE",
+      "body": {},
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{ _.jwt }}"
+        }
+      ],
+      "authentication": {},
+      "metaSortKey": 0,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    }
+  ]
+}

@@ -41,6 +41,18 @@ API disponível em `http://localhost:3000`.
 | `POST` | `/auth/google` | Login Google (`{ "token": "<id_token>" }`) → JWT |
 | `GET` | `/health` | Health check |
 
+## Endpoints de viagens (JWT obrigatório)
+
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| `POST` | `/trips` | Cria viagem → 201 |
+| `GET` | `/trips` | Lista viagens do usuário → 200 |
+| `GET` | `/trips/:id` | Detalhe → 200 / 404 |
+| `PUT` | `/trips/:id` | Edita viagem → 200 / 404 |
+| `DELETE` | `/trips/:id` | Exclui viagem → 204 / 404 |
+
+Collection Insomnia do fluxo completo: `insomnia/vagare-trips.json` (guia em `insomnia/README-trips.md`).
+
 Exemplo de registro (Insomnia/curl):
 
 ```bash
@@ -62,7 +74,8 @@ Authorization: Bearer <token>
 | `npm run dev` | Servidor com hot reload |
 | `npm run build` | Compila TypeScript |
 | `npm start` | Sobe o build de produção |
-| `npm test` | Testes unitários (Jest) |
+| `npm test` | Testes (Jest) |
+| `npm run test:coverage` | Testes + cobertura (meta ≥ 75%) |
 | `npm run lint` | ESLint + Prettier |
 
 ## Estrutura

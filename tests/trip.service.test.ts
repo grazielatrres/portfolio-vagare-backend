@@ -99,6 +99,17 @@ describe('TripService', () => {
 
       expect(tripRepository.create).not.toHaveBeenCalled();
     });
+
+    it('lança ValidationError quando a data é inválida', async () => {
+      await expect(
+        tripService.createTrip('user-1', {
+          ...validPayload,
+          startDate: 'data-invalida',
+        }),
+      ).rejects.toBeInstanceOf(ValidationError);
+
+      expect(tripRepository.create).not.toHaveBeenCalled();
+    });
   });
 
   describe('listTrips', () => {
