@@ -1,15 +1,4 @@
 // auth.service.test.ts — RF01, RF02, RF03, RF04, RF05, RN01, RN02, RN03, RNF04, RNF05
-//
-// RF01 — Cadastro local com nome, e-mail e senha
-// RF02 — Login local com e-mail e senha
-// RF03 — Autenticação via Google (criação/recuperação de usuário)
-// RF04 — Geração de JWT após autenticação bem-sucedida
-// RF05 — Validação de JWT (token válido / inválido)
-// RN01 — Senha com menos de 6 caracteres retorna erro 400
-// RN02 — E-mail duplicado retorna erro 409
-// RN03 — Credenciais inválidas no login retornam 401 sem indicar qual campo falhou
-// RNF04 — JWT com expiração configurável; token expirado rejeitado
-// RNF05 — Senha armazenada com hash bcrypt (nunca em texto puro)
 
 import { AuthProvider, User } from '@prisma/client';
 import jwt from 'jsonwebtoken';
@@ -29,6 +18,12 @@ function buildUser(overrides: Partial<User> = {}): User {
     updatedAt: now,
     ...overrides,
   };
+}
+
+function mockGoogleVerify(authService: AuthService, verifyIdToken: jest.Mock): void {
+  (
+    authService as unknown as { googleClient: { verifyIdToken: typeof verifyIdToken } }
+  ).googleClient = { verifyIdToken };
 }
 
 describe('AuthService', () => {
@@ -51,7 +46,7 @@ describe('AuthService', () => {
     authService = new AuthService(userRepository, config);
   });
 
-  describe('hashPassword / comparePassword (RNF05)', () => {
+  describe('hashPassword / comparePassword', () => {
     it('gera hash bcrypt diferente da senha em texto puro', async () => {
       const password = 'senha123';
       const hash = await authService.hashPassword(password);
@@ -69,7 +64,7 @@ describe('AuthService', () => {
     });
   });
 
-  describe('generateToken / verifyToken (RF04, RF05, RNF04)', () => {
+  describe('generateToken / verifyToken', () => {
     it('gera e valida um JWT com sub e email', () => {
       const token = authService.generateToken({
         id: 'user-1',
@@ -83,10 +78,9 @@ describe('AuthService', () => {
     });
 
     it('rejeita token inválido com 401', () => {
-      expect(() => authService.verifyToken('token.invalido')).toThrow(AppError);
-
       try {
         authService.verifyToken('token.invalido');
+        throw new Error('deveria ter lançado');
       } catch (error) {
         expect(error).toBeInstanceOf(AppError);
         expect((error as AppError).statusCode).toBe(401);
@@ -95,37 +89,22 @@ describe('AuthService', () => {
     });
 
     it('rejeita token expirado com 401 e mensagem clara', () => {
-      const shortLived = new AuthService(userRepository, {
-        ...config,
-        jwtExpiresIn: '1ms',
-      });
-
-      const token = shortLived.generateToken({
-        id: 'user-1',
-        email: 'maria@example.com',
-      });
-
-      // força expiração imediata
       const expired = jwt.sign({ sub: 'user-1', email: 'maria@example.com' }, config.jwtSecret, {
         expiresIn: -10,
       });
 
-      expect(() => shortLived.verifyToken(expired)).toThrow(AppError);
-
       try {
-        shortLived.verifyToken(expired);
+        authService.verifyToken(expired);
+        throw new Error('deveria ter lançado');
       } catch (error) {
         expect(error).toBeInstanceOf(AppError);
         expect((error as AppError).statusCode).toBe(401);
         expect((error as AppError).message).toMatch(/expirado/i);
       }
-
-      // garante que o token curto também é um JWT válido estruturalmente
-      expect(typeof token).toBe('string');
     });
   });
 
-  describe('register (RF01, RN01, RN02, RNF05)', () => {
+  describe('register', () => {
     it('cria usuário com senha hasheada e retorna JWT', async () => {
       userRepository.findByEmail.mockResolvedValue(null);
       userRepository.create.mockImplementation(async (data) =>
@@ -177,7 +156,7 @@ describe('AuthService', () => {
     });
   });
 
-  describe('login (RF02, RN03)', () => {
+  describe('login', () => {
     it('autentica com credenciais válidas e retorna JWT', async () => {
       const passwordHash = await authService.hashPassword('senha123');
       userRepository.findByEmail.mockResolvedValue(buildUser({ passwordHash }));
@@ -208,19 +187,18 @@ describe('AuthService', () => {
     });
   });
 
-  describe('googleLogin (RF03)', () => {
+  describe('googleLogin', () => {
     it('cria usuário google quando ainda não existe e retorna JWT', async () => {
-      const verifyIdToken = jest.fn().mockResolvedValue({
-        getPayload: () => ({
-          email: 'google@example.com',
-          email_verified: true,
-          name: 'Google User',
+      mockGoogleVerify(
+        authService,
+        jest.fn().mockResolvedValue({
+          getPayload: () => ({
+            email: 'google@example.com',
+            email_verified: true,
+            name: 'Google User',
+          }),
         }),
-      });
-
-      (
-        authService as unknown as { googleClient: { verifyIdToken: typeof verifyIdToken } }
-      ).googleClient = { verifyIdToken };
+      );
 
       userRepository.findByEmail.mockResolvedValue(null);
       userRepository.create.mockResolvedValue(
@@ -246,17 +224,16 @@ describe('AuthService', () => {
     });
 
     it('recupera usuário existente sem criar duplicata', async () => {
-      const verifyIdToken = jest.fn().mockResolvedValue({
-        getPayload: () => ({
-          email: 'google@example.com',
-          email_verified: true,
-          name: 'Google User',
+      mockGoogleVerify(
+        authService,
+        jest.fn().mockResolvedValue({
+          getPayload: () => ({
+            email: 'google@example.com',
+            email_verified: true,
+            name: 'Google User',
+          }),
         }),
-      });
-
-      (
-        authService as unknown as { googleClient: { verifyIdToken: typeof verifyIdToken } }
-      ).googleClient = { verifyIdToken };
+      );
 
       userRepository.findByEmail.mockResolvedValue(
         buildUser({
@@ -273,11 +250,7 @@ describe('AuthService', () => {
     });
 
     it('retorna 401 para token do Google inválido', async () => {
-      const verifyIdToken = jest.fn().mockRejectedValue(new Error('invalid'));
-
-      (
-        authService as unknown as { googleClient: { verifyIdToken: typeof verifyIdToken } }
-      ).googleClient = { verifyIdToken };
+      mockGoogleVerify(authService, jest.fn().mockRejectedValue(new Error('invalid')));
 
       await expect(authService.googleLogin('bad-token')).rejects.toMatchObject({
         statusCode: 401,
