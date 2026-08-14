@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import { authRoutes } from './routes/auth/auth.routes';
+import { tripRoutes } from './routes/trip.routes';
 import { errorMiddleware } from './middlewares/error.middleware';
 
 export function createApp() {
@@ -14,6 +15,7 @@ export function createApp() {
   });
 
   app.use('/auth', authRoutes);
+  app.use('/trips', tripRoutes);
 
   app.use(errorMiddleware);
 
