@@ -1,3 +1,5 @@
+// trip.integration.test.ts — RF06, RF08, RF09, RF10, RN01, RN10, RNF07
+
 import { AuthProvider, User } from '@prisma/client';
 import jwt from 'jsonwebtoken';
 import request from 'supertest';
@@ -12,6 +14,11 @@ jest.mock('../src/config/prisma', () => ({
       findUnique: jest.fn(),
       create: jest.fn(),
     },
+    session: {
+      create: jest.fn(),
+      findUnique: jest.fn(),
+      deleteMany: jest.fn(),
+    },
     trip: {
       create: jest.fn(),
       findMany: jest.fn(),
@@ -23,6 +30,10 @@ jest.mock('../src/config/prisma', () => ({
 }));
 
 const prismaUser = prisma.user as unknown as {
+  findUnique: jest.Mock;
+};
+
+const prismaSession = prisma.session as unknown as {
   findUnique: jest.Mock;
 };
 
@@ -49,9 +60,11 @@ function buildUser(overrides: Partial<User> = {}): User {
 }
 
 function authHeader(user: Pick<User, 'id' | 'email'>): string {
-  const token = jwt.sign({ sub: user.id, email: user.email }, env.jwtSecret, {
-    expiresIn: '1h',
-  });
+  const token = jwt.sign(
+    { sub: user.id, email: user.email, sid: `session-${user.id}` },
+    env.jwtSecret,
+    { expiresIn: '1h' },
+  );
   return `Bearer ${token}`;
 }
 
@@ -79,6 +92,7 @@ describe('Trip endpoints (integração)', () => {
       if (where.id === otherUser.id) return otherUser;
       return null;
     });
+    prismaSession.findUnique.mockResolvedValue({ id: 'session-active' });
   });
 
   describe('autenticação', () => {

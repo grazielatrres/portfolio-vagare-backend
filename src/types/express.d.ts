@@ -10,6 +10,7 @@ export interface AuthenticatedUser {
 export interface JwtPayload {
   sub: string;
   email: string;
+  sid: string;
 }
 
 export interface AuthResponse {
@@ -21,6 +22,7 @@ declare global {
   namespace Express {
     interface Request {
       user?: AuthenticatedUser;
+      sessionId?: string;
     }
   }
 }
