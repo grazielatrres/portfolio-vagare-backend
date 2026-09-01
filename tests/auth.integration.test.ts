@@ -1,3 +1,5 @@
+// auth.integration.test.ts — RF01, RF02, RF03, RF04, RNF04
+
 import { AuthProvider, User } from '@prisma/client';
 import jwt from 'jsonwebtoken';
 import request from 'supertest';
