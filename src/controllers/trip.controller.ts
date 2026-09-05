@@ -62,7 +62,8 @@ export class TripController {
   }
 
   private extractPayload(req: Request): TripPayload {
-    const { name, destination, startDate, endDate, budget, numberOfPeople } = req.body as TripPayload;
+    const { name, destination, startDate, endDate, budget, numberOfPeople } =
+      req.body as TripPayload;
     return { name, destination, startDate, endDate, budget, numberOfPeople };
   }
 
