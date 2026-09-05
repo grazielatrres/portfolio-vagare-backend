@@ -65,6 +65,7 @@ Para parar o banco: `docker compose down` (mantém os dados) ou `docker compose 
 | POST | /auth/register | Cadastro local (nome, e-mail, senha) |
 | POST | /auth/login | Login local (e-mail, senha) |
 | POST | /auth/google | Login com Google (token do Google) |
+| POST | /auth/logout | Encerra a sessão do token atual |
 | GET | /health | Health check |
 
 Exemplo de cadastro:
@@ -93,7 +94,20 @@ Todas exigem autenticação (JWT).
 | PUT | /trips/:id | Edita viagem |
 | DELETE | /trips/:id | Exclui viagem |
 
-Collection do Insomnia com o fluxo completo: `insomnia/vagare-trips.json` (guia em `insomnia/README-trips.md`).
+## Endpoints de perfil
+
+Todas exigem autenticação (JWT).
+
+| Método | Rota | Descrição |
+|---|---|---|
+| GET | /users/me | Dados do usuário autenticado e estatísticas |
+| PUT | /users/me | Edita nome e/ou e-mail |
+| DELETE | /users/me | Exclui a conta e todos os dados vinculados |
+
+Collections do Insomnia:
+
+- Viagens: `insomnia/vagare-trips.json` (guia em `insomnia/README-trips.md`)
+- Perfil e logout: `insomnia/vagare-profile.json` (guia em `insomnia/README-profile.md`)
 
 ## Estrutura do projeto
 

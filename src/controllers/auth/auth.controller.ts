@@ -56,6 +56,19 @@ export class AuthController {
       next(error);
     }
   }
+
+  async logout(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.sessionId) {
+        throw new AppError('Não autenticado', 401);
+      }
+
+      await authService.logout(req.sessionId);
+      res.status(204).send();
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 export const authController = new AuthController();
