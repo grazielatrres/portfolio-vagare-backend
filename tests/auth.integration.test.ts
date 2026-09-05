@@ -153,11 +153,9 @@ describe('Auth endpoints (integração)', () => {
     });
 
     it('retorna 401 quando o usuário do token não existe', async () => {
-      const token = jwt.sign(
-        { sub: 'missing-user', email: 'ghost@example.com' },
-        env.jwtSecret,
-        { expiresIn: '1h' },
-      );
+      const token = jwt.sign({ sub: 'missing-user', email: 'ghost@example.com' }, env.jwtSecret, {
+        expiresIn: '1h',
+      });
       prismaUser.findUnique.mockResolvedValue(null);
 
       const response = await request(app).get('/trips').set('Authorization', `Bearer ${token}`);

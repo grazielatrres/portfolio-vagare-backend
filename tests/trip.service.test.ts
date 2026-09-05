@@ -1,4 +1,3 @@
-
 import { TripRepository } from '../src/repositories/trip.repository';
 import { TripService } from '../src/services/trip.service';
 import { NotFoundError, ValidationError } from '../src/types/errors';
