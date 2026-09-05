@@ -8,6 +8,11 @@ export interface CreateUserData {
   provider?: AuthProvider;
 }
 
+export interface UpdateUserData {
+  name?: string;
+  email?: string;
+}
+
 export class UserRepository {
   async findByEmail(email: string): Promise<User | null> {
     return prisma.user.findUnique({ where: { email } });
@@ -26,5 +31,19 @@ export class UserRepository {
         provider: data.provider ?? AuthProvider.local,
       },
     });
+  }
+
+  async update(id: string, data: UpdateUserData): Promise<User> {
+    return prisma.user.update({
+      where: { id },
+      data: {
+        ...(data.name !== undefined && { name: data.name }),
+        ...(data.email !== undefined && { email: data.email }),
+      },
+    });
+  }
+
+  async delete(id: string): Promise<void> {
+    await prisma.user.delete({ where: { id } });
   }
 }

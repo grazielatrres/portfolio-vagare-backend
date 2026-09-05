@@ -4,6 +4,7 @@ import { AuthProvider, User } from '@prisma/client';
 import jwt from 'jsonwebtoken';
 import { AuthService } from '../src/services/auth/auth.service';
 import { UserRepository } from '../src/repositories/auth/user.repository';
+import { SessionRepository } from '../src/repositories/auth/session.repository';
 import { AppError } from '../src/types/errors';
 
 function buildUser(overrides: Partial<User> = {}): User {
@@ -34,6 +35,7 @@ describe('AuthService', () => {
   };
 
   let userRepository: jest.Mocked<UserRepository>;
+  let sessionRepository: jest.Mocked<SessionRepository>;
   let authService: AuthService;
 
   beforeEach(() => {
@@ -41,9 +43,17 @@ describe('AuthService', () => {
       findByEmail: jest.fn(),
       findById: jest.fn(),
       create: jest.fn(),
+      update: jest.fn(),
+      delete: jest.fn(),
     } as unknown as jest.Mocked<UserRepository>;
 
-    authService = new AuthService(userRepository, config);
+    sessionRepository = {
+      create: jest.fn().mockResolvedValue({ id: 'session-1' }),
+      existsById: jest.fn(),
+      deleteById: jest.fn(),
+    } as unknown as jest.Mocked<SessionRepository>;
+
+    authService = new AuthService(userRepository, sessionRepository, config);
   });
 
   describe('hashPassword / comparePassword', () => {
@@ -65,16 +75,35 @@ describe('AuthService', () => {
   });
 
   describe('generateToken / verifyToken', () => {
-    it('gera e valida um JWT com sub e email', () => {
-      const token = authService.generateToken({
-        id: 'user-1',
-        email: 'maria@example.com',
-      });
+    it('gera e valida um JWT com sub, email e sid', () => {
+      const token = authService.generateToken(
+        {
+          id: 'user-1',
+          email: 'maria@example.com',
+        },
+        'session-1',
+      );
 
       const payload = authService.verifyToken(token);
 
       expect(payload.sub).toBe('user-1');
       expect(payload.email).toBe('maria@example.com');
+      expect(payload.sid).toBe('session-1');
+    });
+
+    it('rejeita token sem sid com 401', () => {
+      const token = jwt.sign({ sub: 'user-1', email: 'maria@example.com' }, config.jwtSecret, {
+        expiresIn: '1h',
+      });
+
+      try {
+        authService.verifyToken(token);
+        throw new Error('deveria ter lançado');
+      } catch (error) {
+        expect(error).toBeInstanceOf(AppError);
+        expect((error as AppError).statusCode).toBe(401);
+        expect((error as AppError).message).toBe('Token inválido');
+      }
     });
 
     it('rejeita token inválido com 401', () => {
@@ -256,6 +285,14 @@ describe('AuthService', () => {
         statusCode: 401,
         message: 'Token do Google inválido',
       });
+    });
+  });
+
+  describe('logout', () => {
+    it('destrói a sessão correspondente ao sid do token', async () => {
+      await authService.logout('session-1');
+
+      expect(sessionRepository.deleteById).toHaveBeenCalledWith('session-1');
     });
   });
 });

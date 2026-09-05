@@ -4,6 +4,7 @@ import { AuthProvider, User } from '@prisma/client';
 import { OAuth2Client } from 'google-auth-library';
 import { env } from '../../config/env';
 import { UserRepository } from '../../repositories/auth/user.repository';
+import { SessionRepository } from '../../repositories/auth/session.repository';
 import { AppError } from '../../types/errors';
 import { AuthenticatedUser, AuthResponse, JwtPayload } from '../../types/express';
 
@@ -21,6 +22,7 @@ export class AuthService {
 
   constructor(
     private readonly userRepository: UserRepository = new UserRepository(),
+    private readonly sessionRepository: SessionRepository = new SessionRepository(),
     private readonly config: AuthServiceConfig = {
       jwtSecret: env.jwtSecret,
       jwtExpiresIn: env.jwtExpiresIn,
@@ -115,10 +117,11 @@ export class AuthService {
     return bcrypt.compare(password, hash);
   }
 
-  generateToken(user: Pick<User, 'id' | 'email'>): string {
+  generateToken(user: Pick<User, 'id' | 'email'>, sessionId: string): string {
     const payload: JwtPayload = {
       sub: user.id,
       email: user.email,
+      sid: sessionId,
     };
 
     return jwt.sign(payload, this.config.jwtSecret, {
@@ -129,7 +132,7 @@ export class AuthService {
   verifyToken(token: string): JwtPayload {
     try {
       const decoded = jwt.verify(token, this.config.jwtSecret) as JwtPayload;
-      if (!decoded.sub || !decoded.email) {
+      if (!decoded.sub || !decoded.email || !decoded.sid) {
         throw new AppError('Token inválido', 401);
       }
       return decoded;
@@ -142,6 +145,10 @@ export class AuthService {
       }
       throw error;
     }
+  }
+
+  async logout(sessionId: string): Promise<void> {
+    await this.sessionRepository.deleteById(sessionId);
   }
 
   private validateCredentialsInput(name: string, email: string, password: string): void {
@@ -159,7 +166,9 @@ export class AuthService {
     }
   }
 
-  private buildAuthResponse(user: User): AuthResponse {
+  private async buildAuthResponse(user: User): Promise<AuthResponse> {
+    const session = await this.sessionRepository.create(user.id);
+
     const publicUser: AuthenticatedUser = {
       id: user.id,
       name: user.name,
@@ -168,7 +177,7 @@ export class AuthService {
     };
 
     return {
-      token: this.generateToken(user),
+      token: this.generateToken(user, session.id),
       user: publicUser,
     };
   }

@@ -34,6 +34,10 @@ export class TripRepository {
     });
   }
 
+  async countByUser(userId: string): Promise<number> {
+    return prisma.trip.count({ where: { userId } });
+  }
+
   async findByIdAndUser(id: string, userId: string): Promise<Trip | null> {
     return prisma.trip.findFirst({
       where: { id, userId },

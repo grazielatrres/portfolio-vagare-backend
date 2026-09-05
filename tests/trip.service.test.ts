@@ -1,3 +1,4 @@
+// trip.service.test.ts — RF06, RF07, RF09, RF10, RN02, RN03
 
 import { TripRepository } from '../src/repositories/trip.repository';
 import { TripService } from '../src/services/trip.service';
