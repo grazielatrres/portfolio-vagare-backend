@@ -104,11 +104,6 @@ Todas exigem autenticação (JWT).
 | PUT | /users/me | Edita nome e/ou e-mail |
 | DELETE | /users/me | Exclui a conta e todos os dados vinculados |
 
-Collections do Insomnia:
-
-- Viagens: `insomnia/vagare-trips.json` (guia em `insomnia/README-trips.md`)
-- Perfil e logout: `insomnia/vagare-profile.json` (guia em `insomnia/README-profile.md`)
-
 ## Estrutura do projeto
 
 ```
