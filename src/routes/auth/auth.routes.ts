@@ -10,5 +10,11 @@ authRoutes.post('/google', (req, res, next) => authController.google(req, res, n
 authRoutes.post('/logout', authMiddleware, (req, res, next) =>
   authController.logout(req, res, next),
 );
+authRoutes.post('/forgot-password', (req, res, next) =>
+  authController.forgotPassword(req, res, next),
+);
+authRoutes.post('/reset-password', (req, res, next) =>
+  authController.resetPassword(req, res, next),
+);
 
 export { authRoutes };
