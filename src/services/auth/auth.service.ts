@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import bcrypt from 'bcrypt';
 import jwt, { JsonWebTokenError, TokenExpiredError } from 'jsonwebtoken';
 import { AuthProvider, User } from '@prisma/client';
@@ -5,16 +6,20 @@ import { OAuth2Client } from 'google-auth-library';
 import { env } from '../../config/env';
 import { UserRepository } from '../../repositories/auth/user.repository';
 import { SessionRepository } from '../../repositories/auth/session.repository';
+import { MailService } from '../mail/mail.service';
 import { AppError } from '../../types/errors';
 import { AuthenticatedUser, AuthResponse, JwtPayload } from '../../types/express';
 
 const BCRYPT_ROUNDS = 10;
 const MIN_PASSWORD_LENGTH = 6;
+const RESET_TOKEN_BYTES = 32;
+const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
 
 export interface AuthServiceConfig {
   jwtSecret: string;
   jwtExpiresIn: string;
   googleClientId: string;
+  resetPasswordUrl: string;
 }
 
 export class AuthService {
@@ -27,7 +32,9 @@ export class AuthService {
       jwtSecret: env.jwtSecret,
       jwtExpiresIn: env.jwtExpiresIn,
       googleClientId: env.googleClientId,
+      resetPasswordUrl: env.resetPasswordUrl,
     },
+    private readonly mailService: MailService = new MailService(),
   ) {
     this.googleClient = new OAuth2Client(this.config.googleClientId);
   }
@@ -149,6 +156,50 @@ export class AuthService {
 
   async logout(sessionId: string): Promise<void> {
     await this.sessionRepository.deleteById(sessionId);
+  }
+
+  async requestPasswordReset(email: string): Promise<void> {
+    if (!email?.trim()) {
+      throw new AppError('E-mail é obrigatório', 400);
+    }
+
+    const user = await this.userRepository.findByEmail(email.toLowerCase().trim());
+    if (!user || !user.passwordHash) {
+      return;
+    }
+
+    const rawToken = crypto.randomBytes(RESET_TOKEN_BYTES).toString('hex');
+    const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MS);
+    await this.userRepository.setResetToken(user.id, this.hashResetToken(rawToken), expiresAt);
+
+    const resetLink = `${this.config.resetPasswordUrl}?token=${rawToken}`;
+    await this.mailService.sendPasswordResetEmail({
+      to: user.email,
+      name: user.name,
+      resetLink,
+    });
+  }
+
+  async resetPassword(token: string, newPassword: string): Promise<void> {
+    if (!token?.trim()) {
+      throw new AppError('Token é obrigatório', 400);
+    }
+    if (!newPassword || newPassword.length < MIN_PASSWORD_LENGTH) {
+      throw new AppError('A senha deve ter no mínimo 6 caracteres', 400);
+    }
+
+    const user = await this.userRepository.findByResetTokenHash(this.hashResetToken(token));
+    if (!user || !user.resetTokenExpiresAt || user.resetTokenExpiresAt < new Date()) {
+      throw new AppError('Token inválido ou expirado', 400);
+    }
+
+    const passwordHash = await this.hashPassword(newPassword);
+    await this.userRepository.resetPassword(user.id, passwordHash);
+    await this.sessionRepository.deleteAllByUserId(user.id);
+  }
+
+  private hashResetToken(token: string): string {
+    return crypto.createHash('sha256').update(token).digest('hex');
   }
 
   private validateCredentialsInput(name: string, email: string, password: string): void {
