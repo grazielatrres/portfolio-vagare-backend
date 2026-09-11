@@ -69,39 +69,6 @@ export class AuthController {
       next(error);
     }
   }
-
-  async forgotPassword(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const { email } = req.body as { email?: string };
-
-      if (!email) {
-        throw new AppError('E-mail é obrigatório', 400);
-      }
-
-      await authService.requestPasswordReset(email);
-      res.status(200).json({
-        message:
-          'Se o e-mail informado estiver cadastrado, você receberá um link de redefinição de senha.',
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
-
-  async resetPassword(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const { token, password } = req.body as { token?: string; password?: string };
-
-      if (!token || !password) {
-        throw new AppError('Token e nova senha são obrigatórios', 400);
-      }
-
-      await authService.resetPassword(token, password);
-      res.status(200).json({ message: 'Senha redefinida com sucesso.' });
-    } catch (error) {
-      next(error);
-    }
-  }
 }
 
 export const authController = new AuthController();

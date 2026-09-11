@@ -46,26 +46,4 @@ export class UserRepository {
   async delete(id: string): Promise<void> {
     await prisma.user.delete({ where: { id } });
   }
-
-  async setResetToken(
-    id: string,
-    resetTokenHash: string,
-    resetTokenExpiresAt: Date,
-  ): Promise<void> {
-    await prisma.user.update({
-      where: { id },
-      data: { resetTokenHash, resetTokenExpiresAt },
-    });
-  }
-
-  async findByResetTokenHash(resetTokenHash: string): Promise<User | null> {
-    return prisma.user.findFirst({ where: { resetTokenHash } });
-  }
-
-  async resetPassword(id: string, passwordHash: string): Promise<void> {
-    await prisma.user.update({
-      where: { id },
-      data: { passwordHash, resetTokenHash: null, resetTokenExpiresAt: null },
-    });
-  }
 }
