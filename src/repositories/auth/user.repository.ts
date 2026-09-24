@@ -59,7 +59,9 @@ export class UserRepository {
   }
 
   async findByResetTokenHash(resetTokenHash: string): Promise<User | null> {
-    return prisma.user.findFirst({ where: { resetTokenHash } });
+    return prisma.user.findUnique({
+      where: { resetTokenHash, resetTokenExpiresAt: { gt: new Date() } },
+    });
   }
 
   async resetPassword(id: string, passwordHash: string): Promise<void> {

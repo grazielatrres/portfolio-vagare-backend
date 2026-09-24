@@ -189,7 +189,7 @@ export class AuthService {
     }
 
     const user = await this.userRepository.findByResetTokenHash(this.hashResetToken(token));
-    if (!user || !user.resetTokenExpiresAt || user.resetTokenExpiresAt < new Date()) {
+    if (!user) {
       throw new AppError('Token inválido ou expirado', 400);
     }
 
