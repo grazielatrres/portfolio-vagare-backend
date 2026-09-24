@@ -43,7 +43,19 @@ npm run dev
 
 A API fica disponível em `http://localhost:3000`.
 
-Para parar o banco: `docker compose down` (mantém os dados) ou `docker compose down -v` (apaga os dados).
+### Rodando o backend com Docker
+
+Para subir banco e API juntos, sem precisar de Node instalado:
+
+```bash
+docker compose up -d --build
+```
+
+O container `vagare-api` aguarda o Postgres ficar saudável, aplica as migrations (`prisma migrate deploy`) e inicia o servidor em `http://localhost:3000`. As variáveis vêm do `.env`, exceto `DATABASE_URL`, que o compose sobrescreve para apontar para o serviço `postgres`. Após mudar o código, rode `docker compose up -d --build` de novo. Logs: `docker compose logs -f api`.
+
+Para subir só o banco e rodar a API localmente com `npm run dev`: `docker compose up -d postgres`.
+
+Para parar tudo: `docker compose down` (mantém os dados) ou `docker compose down -v` (apaga os dados).
 
 ## Scripts
 
