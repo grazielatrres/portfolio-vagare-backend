@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { authController } from '../../controllers/auth/auth.controller';
 import { authMiddleware } from '../../middlewares/auth.middleware';
+import { forgotPasswordRateLimiter } from '../../middlewares/rateLimit.middleware';
 
 const authRoutes = Router();
 
@@ -10,7 +11,7 @@ authRoutes.post('/google', (req, res, next) => authController.google(req, res, n
 authRoutes.post('/logout', authMiddleware, (req, res, next) =>
   authController.logout(req, res, next),
 );
-authRoutes.post('/forgot-password', (req, res, next) =>
+authRoutes.post('/forgot-password', forgotPasswordRateLimiter, (req, res, next) =>
   authController.forgotPassword(req, res, next),
 );
 authRoutes.post('/reset-password', (req, res, next) =>

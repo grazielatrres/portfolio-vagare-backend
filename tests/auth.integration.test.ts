@@ -13,6 +13,7 @@ jest.mock('../src/config/prisma', () => ({
     user: {
       findUnique: jest.fn(),
       create: jest.fn(),
+      update: jest.fn(),
     },
     session: {
       create: jest.fn(),
@@ -32,6 +33,7 @@ jest.mock('../src/config/prisma', () => ({
 const prismaUser = prisma.user as unknown as {
   findUnique: jest.Mock;
   create: jest.Mock;
+  update: jest.Mock;
 };
 
 const prismaSession = prisma.session as unknown as {
@@ -149,6 +151,82 @@ describe('Auth endpoints (integração)', () => {
 
       expect(response.status).toBe(400);
       expect(response.body).toEqual({ error: 'Token do Google é obrigatório' });
+    });
+  });
+
+  describe('POST /auth/forgot-password', () => {
+    it('retorna 400 quando falta o e-mail', async () => {
+      const response = await request(app).post('/auth/forgot-password').send({});
+
+      expect(response.status).toBe(400);
+      expect(response.body).toEqual({ error: 'E-mail é obrigatório' });
+    });
+
+    it('retorna 200 com mensagem genérica quando o e-mail está cadastrado', async () => {
+      prismaUser.findUnique.mockResolvedValue(buildUser());
+      prismaUser.update.mockResolvedValue(buildUser());
+
+      const response = await request(app)
+        .post('/auth/forgot-password')
+        .send({ email: 'maria@example.com' });
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({
+        message:
+          'Se o e-mail informado estiver cadastrado, você receberá um link de redefinição de senha.',
+      });
+      expect(prismaUser.update).toHaveBeenCalledTimes(1);
+    });
+
+    it('retorna 200 com a mesma mensagem genérica quando o e-mail não está cadastrado', async () => {
+      prismaUser.findUnique.mockResolvedValue(null);
+
+      const response = await request(app)
+        .post('/auth/forgot-password')
+        .send({ email: 'naoexiste@example.com' });
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({
+        message:
+          'Se o e-mail informado estiver cadastrado, você receberá um link de redefinição de senha.',
+      });
+      expect(prismaUser.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('POST /auth/reset-password', () => {
+    it('retorna 400 quando faltam campos', async () => {
+      const response = await request(app).post('/auth/reset-password').send({ token: 'abc' });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toEqual({ error: 'Token e nova senha são obrigatórios' });
+    });
+
+    it('redefine a senha com sucesso e retorna 200', async () => {
+      prismaUser.findUnique.mockResolvedValue(
+        buildUser({ resetTokenHash: 'hash', resetTokenExpiresAt: new Date(Date.now() + 60_000) }),
+      );
+      prismaUser.update.mockResolvedValue(buildUser());
+      prismaSession.deleteMany.mockResolvedValue({ count: 1 });
+
+      const response = await request(app)
+        .post('/auth/reset-password')
+        .send({ token: 'token-valido', password: 'novaSenha123' });
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({ message: 'Senha redefinida com sucesso.' });
+      expect(prismaSession.deleteMany).toHaveBeenCalledWith({ where: { userId: 'user-1' } });
+    });
+
+    it('retorna 400 quando o token é inválido ou expirado', async () => {
+      prismaUser.findUnique.mockResolvedValue(null);
+
+      const response = await request(app)
+        .post('/auth/reset-password')
+        .send({ token: 'token-invalido', password: 'novaSenha123' });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toEqual({ error: 'Token inválido ou expirado' });
     });
   });
 

@@ -5,6 +5,7 @@ import jwt from 'jsonwebtoken';
 import { AuthService } from '../src/services/auth/auth.service';
 import { UserRepository } from '../src/repositories/auth/user.repository';
 import { SessionRepository } from '../src/repositories/auth/session.repository';
+import { MailService } from '../src/services/mail/mail.service';
 import { AppError } from '../src/types/errors';
 
 function buildUser(overrides: Partial<User> = {}): User {
@@ -32,10 +33,12 @@ describe('AuthService', () => {
     jwtSecret: 'test-secret',
     jwtExpiresIn: '1h',
     googleClientId: 'google-client-id',
+    resetPasswordUrl: 'vagareapp://reset-password',
   };
 
   let userRepository: jest.Mocked<UserRepository>;
   let sessionRepository: jest.Mocked<SessionRepository>;
+  let mailService: jest.Mocked<MailService>;
   let authService: AuthService;
 
   beforeEach(() => {
@@ -45,15 +48,23 @@ describe('AuthService', () => {
       create: jest.fn(),
       update: jest.fn(),
       delete: jest.fn(),
+      setResetToken: jest.fn(),
+      findByResetTokenHash: jest.fn(),
+      resetPassword: jest.fn(),
     } as unknown as jest.Mocked<UserRepository>;
 
     sessionRepository = {
       create: jest.fn().mockResolvedValue({ id: 'session-1' }),
       existsById: jest.fn(),
       deleteById: jest.fn(),
+      deleteAllByUserId: jest.fn(),
     } as unknown as jest.Mocked<SessionRepository>;
 
-    authService = new AuthService(userRepository, sessionRepository, config);
+    mailService = {
+      sendPasswordResetEmail: jest.fn(),
+    } as unknown as jest.Mocked<MailService>;
+
+    authService = new AuthService(userRepository, sessionRepository, config, mailService);
   });
 
   describe('hashPassword / comparePassword', () => {
@@ -293,6 +304,84 @@ describe('AuthService', () => {
       await authService.logout('session-1');
 
       expect(sessionRepository.deleteById).toHaveBeenCalledWith('session-1');
+    });
+  });
+
+  describe('requestPasswordReset', () => {
+    it('gera e salva token hasheado com expiração e dispara o e-mail', async () => {
+      userRepository.findByEmail.mockResolvedValue(buildUser({ passwordHash: 'hashed' }));
+
+      await authService.requestPasswordReset('maria@example.com');
+
+      expect(userRepository.setResetToken).toHaveBeenCalledTimes(1);
+      const [userId, resetTokenHash, expiresAt] = userRepository.setResetToken.mock.calls[0];
+      expect(userId).toBe('user-1');
+      expect(resetTokenHash).toEqual(expect.any(String));
+      expect(resetTokenHash).toHaveLength(64);
+      expect(expiresAt).toBeInstanceOf(Date);
+      expect(expiresAt.getTime()).toBeGreaterThan(Date.now());
+
+      expect(mailService.sendPasswordResetEmail).toHaveBeenCalledTimes(1);
+      const emailArg = mailService.sendPasswordResetEmail.mock.calls[0][0];
+      expect(emailArg.to).toBe('maria@example.com');
+      expect(emailArg.resetLink).toContain(config.resetPasswordUrl);
+    });
+
+    it('retorna silenciosamente sem lançar erro quando o e-mail não existe', async () => {
+      userRepository.findByEmail.mockResolvedValue(null);
+
+      await expect(
+        authService.requestPasswordReset('naoexiste@example.com'),
+      ).resolves.toBeUndefined();
+
+      expect(userRepository.setResetToken).not.toHaveBeenCalled();
+      expect(mailService.sendPasswordResetEmail).not.toHaveBeenCalled();
+    });
+
+    it('retorna silenciosamente sem lançar erro quando o usuário não tem passwordHash', async () => {
+      userRepository.findByEmail.mockResolvedValue(buildUser({ passwordHash: null }));
+
+      await expect(authService.requestPasswordReset('maria@example.com')).resolves.toBeUndefined();
+
+      expect(userRepository.setResetToken).not.toHaveBeenCalled();
+      expect(mailService.sendPasswordResetEmail).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('resetPassword', () => {
+    it('atualiza a senha com token válido e encerra todas as sessões do usuário', async () => {
+      userRepository.findByResetTokenHash.mockResolvedValue(buildUser());
+
+      await authService.resetPassword('token-valido', 'novaSenha123');
+
+      expect(userRepository.resetPassword).toHaveBeenCalledWith('user-1', expect.any(String));
+      const newPasswordHash = userRepository.resetPassword.mock.calls[0][1];
+      expect(newPasswordHash).not.toBe('novaSenha123');
+      expect(sessionRepository.deleteAllByUserId).toHaveBeenCalledWith('user-1');
+    });
+
+    it('retorna 400 quando o token é inválido ou expirado', async () => {
+      userRepository.findByResetTokenHash.mockResolvedValue(null);
+
+      await expect(
+        authService.resetPassword('token-invalido', 'novaSenha123'),
+      ).rejects.toMatchObject({
+        statusCode: 400,
+        message: 'Token inválido ou expirado',
+      });
+
+      expect(userRepository.resetPassword).not.toHaveBeenCalled();
+      expect(sessionRepository.deleteAllByUserId).not.toHaveBeenCalled();
+    });
+
+    it('retorna 400 quando a nova senha tem menos de 6 caracteres', async () => {
+      await expect(authService.resetPassword('token-valido', '123')).rejects.toMatchObject({
+        statusCode: 400,
+        message: 'A senha deve ter no mínimo 6 caracteres',
+      });
+
+      expect(userRepository.findByResetTokenHash).not.toHaveBeenCalled();
+      expect(userRepository.resetPassword).not.toHaveBeenCalled();
     });
   });
 });
