@@ -11,7 +11,7 @@ export const env = {
   gmailUser: process.env.GMAIL_USER ?? '',
   gmailAppPassword: process.env.GMAIL_APP_PASSWORD ?? '',
   mailFromName: process.env.MAIL_FROM_NAME ?? 'Vagare',
-  resetPasswordUrl: process.env.RESET_PASSWORD_URL ?? 'https://vagare.app/reset-password',
+  resetPasswordUrl: process.env.RESET_PASSWORD_URL ?? 'vagareapp://reset-password',
 };
 
 export function assertServerEnv(): void {
