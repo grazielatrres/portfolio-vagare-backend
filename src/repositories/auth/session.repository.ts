@@ -19,4 +19,8 @@ export class SessionRepository {
   async deleteById(id: string): Promise<void> {
     await prisma.session.deleteMany({ where: { id } });
   }
+
+  async deleteAllByUserId(userId: string): Promise<void> {
+    await prisma.session.deleteMany({ where: { userId } });
+  }
 }

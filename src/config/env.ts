@@ -8,6 +8,10 @@ export const env = {
   jwtSecret: process.env.JWT_SECRET ?? '',
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? '24h',
   googleClientId: process.env.GOOGLE_CLIENT_ID ?? '',
+  gmailUser: process.env.GMAIL_USER ?? '',
+  gmailAppPassword: process.env.GMAIL_APP_PASSWORD ?? '',
+  mailFromName: process.env.MAIL_FROM_NAME ?? 'Vagare',
+  resetPasswordUrl: process.env.RESET_PASSWORD_URL ?? 'https://vagare.app/reset-password',
 };
 
 export function assertServerEnv(): void {
