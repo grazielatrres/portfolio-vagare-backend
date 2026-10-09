@@ -133,12 +133,15 @@ export class AuthService {
 
     return jwt.sign(payload, this.config.jwtSecret, {
       expiresIn: this.config.jwtExpiresIn as jwt.SignOptions['expiresIn'],
+      algorithm: 'HS256',
     });
   }
 
   verifyToken(token: string): JwtPayload {
     try {
-      const decoded = jwt.verify(token, this.config.jwtSecret) as JwtPayload;
+      const decoded = jwt.verify(token, this.config.jwtSecret, {
+        algorithms: ['HS256'],
+      }) as JwtPayload;
       if (!decoded.sub || !decoded.email || !decoded.sid) {
         throw new AppError('Token inválido', 401);
       }

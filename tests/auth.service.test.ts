@@ -16,6 +16,8 @@ function buildUser(overrides: Partial<User> = {}): User {
     email: 'maria@example.com',
     passwordHash: null,
     provider: AuthProvider.local,
+    resetTokenHash: null,
+    resetTokenExpiresAt: null,
     createdAt: now,
     updatedAt: now,
     ...overrides,
@@ -120,6 +122,23 @@ describe('AuthService', () => {
     it('rejeita token inválido com 401', () => {
       try {
         authService.verifyToken('token.invalido');
+        throw new Error('deveria ter lançado');
+      } catch (error) {
+        expect(error).toBeInstanceOf(AppError);
+        expect((error as AppError).statusCode).toBe(401);
+        expect((error as AppError).message).toBe('Token inválido');
+      }
+    });
+
+    it('rejeita token com assinatura inválida com 401', () => {
+      const token = jwt.sign(
+        { sub: 'user-1', email: 'maria@example.com', sid: 'session-1' },
+        'secret-errado',
+        { expiresIn: '1h' },
+      );
+
+      try {
+        authService.verifyToken(token);
         throw new Error('deveria ter lançado');
       } catch (error) {
         expect(error).toBeInstanceOf(AppError);

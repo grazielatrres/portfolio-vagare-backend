@@ -50,6 +50,8 @@ function buildUser(overrides: Partial<User> = {}): User {
     email: 'maria@example.com',
     passwordHash: '$2b$10$abcdefghijklmnopqrstuuABCDEFGHIJKLMNOPQRSTUVWXYZ012',
     provider: AuthProvider.local,
+    resetTokenHash: null,
+    resetTokenExpiresAt: null,
     createdAt: now,
     updatedAt: now,
     ...overrides,
