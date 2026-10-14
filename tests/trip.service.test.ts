@@ -110,6 +110,42 @@ describe('TripService', () => {
 
       expect(tripRepository.create).not.toHaveBeenCalled();
     });
+
+    it('lança ValidationError quando budget é negativo', async () => {
+      await expect(
+        tripService.createTrip('user-1', { ...validPayload, budget: -1 }),
+      ).rejects.toBeInstanceOf(ValidationError);
+
+      expect(tripRepository.create).not.toHaveBeenCalled();
+    });
+
+    it('lança ValidationError quando numberOfPeople é zero', async () => {
+      await expect(
+        tripService.createTrip('user-1', { ...validPayload, numberOfPeople: 0 }),
+      ).rejects.toBeInstanceOf(ValidationError);
+
+      expect(tripRepository.create).not.toHaveBeenCalled();
+    });
+
+    it('lança ValidationError quando numberOfPeople não é inteiro', async () => {
+      await expect(
+        tripService.createTrip('user-1', { ...validPayload, numberOfPeople: 2.5 }),
+      ).rejects.toBeInstanceOf(ValidationError);
+
+      expect(tripRepository.create).not.toHaveBeenCalled();
+    });
+
+    it('aceita budget igual a 0 e numberOfPeople igual a 1', async () => {
+      const created = buildTrip({ budget: 0, numberOfPeople: 1 });
+      tripRepository.create.mockResolvedValue(created);
+
+      await tripService.createTrip('user-1', { ...validPayload, budget: 0, numberOfPeople: 1 });
+
+      expect(tripRepository.create).toHaveBeenCalledWith(
+        'user-1',
+        expect.objectContaining({ budget: 0, numberOfPeople: 1 }),
+      );
+    });
   });
 
   describe('listTrips', () => {
@@ -177,6 +213,47 @@ describe('TripService', () => {
 
       await expect(tripService.updateTrip('trip-1', 'user-2', validPayload)).rejects.toBeInstanceOf(
         NotFoundError,
+      );
+    });
+
+    it('lança ValidationError quando budget é negativo', async () => {
+      await expect(
+        tripService.updateTrip('trip-1', 'user-1', { ...validPayload, budget: -1 }),
+      ).rejects.toBeInstanceOf(ValidationError);
+
+      expect(tripRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('lança ValidationError quando numberOfPeople é zero', async () => {
+      await expect(
+        tripService.updateTrip('trip-1', 'user-1', { ...validPayload, numberOfPeople: 0 }),
+      ).rejects.toBeInstanceOf(ValidationError);
+
+      expect(tripRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('lança ValidationError quando numberOfPeople não é inteiro', async () => {
+      await expect(
+        tripService.updateTrip('trip-1', 'user-1', { ...validPayload, numberOfPeople: 2.5 }),
+      ).rejects.toBeInstanceOf(ValidationError);
+
+      expect(tripRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('aceita budget igual a 0 e numberOfPeople igual a 1', async () => {
+      const updated = buildTrip({ budget: 0, numberOfPeople: 1 });
+      tripRepository.update.mockResolvedValue(updated);
+
+      await tripService.updateTrip('trip-1', 'user-1', {
+        ...validPayload,
+        budget: 0,
+        numberOfPeople: 1,
+      });
+
+      expect(tripRepository.update).toHaveBeenCalledWith(
+        'trip-1',
+        'user-1',
+        expect.objectContaining({ budget: 0, numberOfPeople: 1 }),
       );
     });
   });

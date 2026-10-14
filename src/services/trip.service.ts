@@ -53,6 +53,18 @@ export class TripService {
       throw new ValidationError('A data de término deve ser igual ou posterior à data de início');
     }
 
+    if (data.budget !== undefined && data.budget !== null && data.budget < 0) {
+      throw new ValidationError('Orçamento não pode ser negativo');
+    }
+
+    if (
+      data.numberOfPeople !== undefined &&
+      data.numberOfPeople !== null &&
+      (!Number.isInteger(data.numberOfPeople) || data.numberOfPeople < 1)
+    ) {
+      throw new ValidationError('Número de pessoas deve ser pelo menos 1');
+    }
+
     return {
       name: data.name.trim(),
       destination: data.destination.trim(),

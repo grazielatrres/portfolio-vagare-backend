@@ -1,6 +1,6 @@
 // trip.integration.test.ts — RF06, RF08, RF09, RF10, RN01, RN10, RNF07
 
-import { AuthProvider, User } from '@prisma/client';
+import { AuthProvider, Prisma, User } from '@prisma/client';
 import jwt from 'jsonwebtoken';
 import request from 'supertest';
 import { createApp } from '../src/app';
@@ -129,6 +129,20 @@ describe('Trip endpoints (integração)', () => {
           data: expect.objectContaining({ userId: owner.id }),
         }),
       );
+    });
+
+    it('serializa budget como string decimal na resposta', async () => {
+      const created = buildTrip({ budget: new Prisma.Decimal('5000.00'), numberOfPeople: 2 });
+      prismaTrip.create.mockResolvedValue(created);
+
+      const response = await request(app)
+        .post('/trips')
+        .set('Authorization', authHeader(owner))
+        .send(tripPayload);
+
+      expect(response.status).toBe(201);
+      expect(typeof response.body.budget).toBe('string');
+      expect(response.body.budget).toBe('5000');
     });
 
     it('retorna 400 quando o payload é inválido', async () => {
