@@ -66,13 +66,17 @@ model Trip {
 }
 
 model Activity {
-  id       String    @id @default(uuid())
-  tripId   String    @map("trip_id")
-  name     String
-  date     DateTime  @db.Date
-  time     DateTime? @db.Time(0)
-  location String?
-  trip     Trip      @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  id             String    @id @default(uuid())
+  tripId         String    @map("trip_id")
+  name           String
+  date           DateTime  @db.Date
+  time           DateTime? @db.Time(0)
+  location       String?
+  period         String?
+  category       String?
+  estimatedCost  Decimal?  @map("estimated_cost") @db.Decimal(12, 2)
+  description    String?
+  trip           Trip      @relation(fields: [tripId], references: [id], onDelete: Cascade)
 
   @@index([tripId])
   @@map("activities")
