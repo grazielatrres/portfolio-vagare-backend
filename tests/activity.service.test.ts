@@ -34,6 +34,7 @@ describe('ActivityService', () => {
       create: jest.fn(),
       findAllByTrip: jest.fn(),
       findByIdAndTrip: jest.fn(),
+      findByTripDateAndTime: jest.fn(),
       delete: jest.fn(),
     } as unknown as jest.Mocked<ActivityRepository>;
 
@@ -180,6 +181,39 @@ describe('ActivityService', () => {
         activityService.createActivity('trip-1', 'user-1', validPayload),
       ).rejects.toBeInstanceOf(NotFoundError);
       expect(activityRepository.create).not.toHaveBeenCalled();
+    });
+
+    it('lança ValidationError quando já existe atividade no mesmo dia e horário', async () => {
+      tripRepository.findByIdAndUser.mockResolvedValue(trip);
+      activityRepository.findByTripDateAndTime.mockResolvedValue(buildActivity());
+
+      await expect(
+        activityService.createActivity('trip-1', 'user-1', validPayload),
+      ).rejects.toBeInstanceOf(ValidationError);
+      expect(activityRepository.create).not.toHaveBeenCalled();
+    });
+
+    it('permite duas atividades no mesmo dia em horários diferentes', async () => {
+      tripRepository.findByIdAndUser.mockResolvedValue(trip);
+      activityRepository.findByTripDateAndTime.mockResolvedValue(null);
+      activityRepository.create.mockResolvedValue(buildActivity());
+
+      await activityService.createActivity('trip-1', 'user-1', validPayload);
+
+      expect(activityRepository.create).toHaveBeenCalled();
+    });
+
+    it('não verifica conflito de horário quando a atividade não tem horário definido', async () => {
+      tripRepository.findByIdAndUser.mockResolvedValue(trip);
+      activityRepository.create.mockResolvedValue(buildActivity());
+
+      await activityService.createActivity('trip-1', 'user-1', {
+        name: 'Fira – Centro Histórico',
+        date: '2026-09-02',
+      });
+
+      expect(activityRepository.findByTripDateAndTime).not.toHaveBeenCalled();
+      expect(activityRepository.create).toHaveBeenCalled();
     });
   });
 

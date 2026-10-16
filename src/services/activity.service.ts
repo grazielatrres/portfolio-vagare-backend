@@ -33,6 +33,18 @@ export class ActivityService {
   async createActivity(tripId: string, userId: string, data: ActivityPayload): Promise<Activity> {
     const trip = await this.ensureTripAccess(tripId, userId);
     const payload = this.validatePayload(data, trip.startDate, trip.endDate);
+
+    if (payload.time) {
+      const conflict = await this.activityRepository.findByTripDateAndTime(
+        tripId,
+        payload.date,
+        payload.time,
+      );
+      if (conflict) {
+        throw new ValidationError('Já existe uma atividade cadastrada nesse horário');
+      }
+    }
+
     return this.activityRepository.create(tripId, payload);
   }
 

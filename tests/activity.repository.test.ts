@@ -91,6 +91,34 @@ describe('ActivityRepository', () => {
     });
   });
 
+  describe('findByTripDateAndTime', () => {
+    it('busca atividade por tripId, data e horário juntos', async () => {
+      const activity = buildActivity();
+      const date = new Date('2026-09-02');
+      const time = new Date(Date.UTC(1970, 0, 1, 14, 30, 0));
+      prismaActivity.findFirst.mockResolvedValue(activity);
+
+      const result = await repository.findByTripDateAndTime(tripId, date, time);
+
+      expect(prismaActivity.findFirst).toHaveBeenCalledWith({
+        where: { tripId, date, time },
+      });
+      expect(result).toEqual(activity);
+    });
+
+    it('retorna null quando não há atividade nesse horário', async () => {
+      prismaActivity.findFirst.mockResolvedValue(null);
+
+      const result = await repository.findByTripDateAndTime(
+        tripId,
+        new Date('2026-09-02'),
+        new Date(Date.UTC(1970, 0, 1, 14, 30, 0)),
+      );
+
+      expect(result).toBeNull();
+    });
+  });
+
   describe('delete', () => {
     it('exclui somente se a atividade pertencer à viagem', async () => {
       const existing = buildActivity();

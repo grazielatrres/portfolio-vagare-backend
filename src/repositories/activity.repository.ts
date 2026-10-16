@@ -42,6 +42,12 @@ export class ActivityRepository {
     });
   }
 
+  async findByTripDateAndTime(tripId: string, date: Date, time: Date): Promise<Activity | null> {
+    return prisma.activity.findFirst({
+      where: { tripId, date, time },
+    });
+  }
+
   async delete(id: string, tripId: string): Promise<Activity | null> {
     const existing = await this.findByIdAndTrip(id, tripId);
     if (!existing) {
