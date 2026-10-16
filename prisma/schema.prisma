@@ -52,6 +52,7 @@ model Trip {
   startDate      DateTime   @map("start_date") @db.Date
   endDate        DateTime   @map("end_date") @db.Date
   budget         Decimal?   @db.Decimal(12, 2)
+  currency       String     @default("BRL")
   numberOfPeople Int?       @map("number_of_people")
   createdAt      DateTime   @default(now()) @map("created_at")
   updatedAt      DateTime   @updatedAt @map("updated_at")
