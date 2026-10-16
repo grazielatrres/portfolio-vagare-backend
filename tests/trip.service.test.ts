@@ -42,6 +42,7 @@ describe('TripService', () => {
         startDate: validPayload.startDate,
         endDate: validPayload.endDate,
         budget: validPayload.budget,
+        currency: 'BRL',
         numberOfPeople: validPayload.numberOfPeople,
       });
       expect(result).toEqual(created);
@@ -144,6 +145,26 @@ describe('TripService', () => {
       expect(tripRepository.create).toHaveBeenCalledWith(
         'user-1',
         expect.objectContaining({ budget: 0, numberOfPeople: 1 }),
+      );
+    });
+
+    it('lança ValidationError quando a moeda não é suportada', async () => {
+      await expect(
+        tripService.createTrip('user-1', { ...validPayload, currency: 'JPY' }),
+      ).rejects.toBeInstanceOf(ValidationError);
+
+      expect(tripRepository.create).not.toHaveBeenCalled();
+    });
+
+    it('normaliza a moeda para maiúsculas', async () => {
+      const created = buildTrip({ currency: 'USD' });
+      tripRepository.create.mockResolvedValue(created);
+
+      await tripService.createTrip('user-1', { ...validPayload, currency: 'usd' });
+
+      expect(tripRepository.create).toHaveBeenCalledWith(
+        'user-1',
+        expect.objectContaining({ currency: 'USD' }),
       );
     });
   });
@@ -255,6 +276,16 @@ describe('TripService', () => {
         'user-1',
         expect.objectContaining({ budget: 0, numberOfPeople: 1 }),
       );
+    });
+
+    it('lança ValidationError ao mudar a moeda sem reenviar o orçamento', async () => {
+      const { budget: _budget, ...payloadWithoutBudget } = validPayload;
+
+      await expect(
+        tripService.updateTrip('trip-1', 'user-1', { ...payloadWithoutBudget, currency: 'USD' }),
+      ).rejects.toBeInstanceOf(ValidationError);
+
+      expect(tripRepository.update).not.toHaveBeenCalled();
     });
   });
 
