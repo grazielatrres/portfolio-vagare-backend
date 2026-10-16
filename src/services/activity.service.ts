@@ -71,15 +71,14 @@ export class ActivityService {
     const time = this.parseTime(data.time);
 
     const period = data.period ? data.period.toLowerCase() : null;
-    if (period !== null && !SUPPORTED_PERIODS.includes(period as (typeof SUPPORTED_PERIODS)[number])) {
+    if (
+      period !== null &&
+      !SUPPORTED_PERIODS.includes(period as (typeof SUPPORTED_PERIODS)[number])
+    ) {
       throw new ValidationError('Período inválido');
     }
 
-    if (
-      data.estimatedCost !== undefined &&
-      data.estimatedCost !== null &&
-      data.estimatedCost < 0
-    ) {
+    if (data.estimatedCost !== undefined && data.estimatedCost !== null && data.estimatedCost < 0) {
       throw new ValidationError('Valor estimado não pode ser negativo');
     }
 
