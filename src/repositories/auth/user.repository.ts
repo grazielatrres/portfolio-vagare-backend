@@ -8,6 +8,11 @@ export interface CreateUserData {
   provider?: AuthProvider;
 }
 
+export interface UpdateUserData {
+  name?: string;
+  email?: string;
+}
+
 export class UserRepository {
   async findByEmail(email: string): Promise<User | null> {
     return prisma.user.findUnique({ where: { email } });
@@ -25,6 +30,44 @@ export class UserRepository {
         passwordHash: data.passwordHash ?? null,
         provider: data.provider ?? AuthProvider.local,
       },
+    });
+  }
+
+  async update(id: string, data: UpdateUserData): Promise<User> {
+    return prisma.user.update({
+      where: { id },
+      data: {
+        ...(data.name !== undefined && { name: data.name }),
+        ...(data.email !== undefined && { email: data.email }),
+      },
+    });
+  }
+
+  async delete(id: string): Promise<void> {
+    await prisma.user.delete({ where: { id } });
+  }
+
+  async setResetToken(
+    id: string,
+    resetTokenHash: string,
+    resetTokenExpiresAt: Date,
+  ): Promise<void> {
+    await prisma.user.update({
+      where: { id },
+      data: { resetTokenHash, resetTokenExpiresAt },
+    });
+  }
+
+  async findByResetTokenHash(resetTokenHash: string): Promise<User | null> {
+    return prisma.user.findUnique({
+      where: { resetTokenHash, resetTokenExpiresAt: { gt: new Date() } },
+    });
+  }
+
+  async resetPassword(id: string, passwordHash: string): Promise<void> {
+    await prisma.user.update({
+      where: { id },
+      data: { passwordHash, resetTokenHash: null, resetTokenExpiresAt: null },
     });
   }
 }

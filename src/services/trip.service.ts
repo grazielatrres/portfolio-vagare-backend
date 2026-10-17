@@ -3,6 +3,7 @@ import { CreateTripData, TripRepository } from '../repositories/trip.repository'
 import { NotFoundError, ValidationError } from '../types/errors';
 
 const TRIP_NOT_FOUND = 'Viagem não encontrada';
+const SUPPORTED_CURRENCIES = ['BRL', 'USD', 'EUR'] as const;
 
 export interface TripPayload {
   name: string;
@@ -10,6 +11,7 @@ export interface TripPayload {
   startDate: Date | string;
   endDate: Date | string;
   budget?: number | null;
+  currency?: string | null;
   numberOfPeople?: number | null;
 }
 
@@ -30,7 +32,7 @@ export class TripService {
 
   async updateTrip(id: string, userId: string, data: TripPayload): Promise<Trip> {
     return this.ensureFound(
-      await this.tripRepository.update(id, userId, this.validateTripPayload(data)),
+      await this.tripRepository.update(id, userId, this.validateTripPayload(data, true)),
     );
   }
 
@@ -38,7 +40,7 @@ export class TripService {
     return this.ensureFound(await this.tripRepository.delete(id, userId));
   }
 
-  private validateTripPayload(data: TripPayload): CreateTripData {
+  private validateTripPayload(data: TripPayload, isUpdate = false): CreateTripData {
     if (!this.hasText(data.name)) {
       throw new ValidationError('Nome é obrigatório');
     }
@@ -53,12 +55,38 @@ export class TripService {
       throw new ValidationError('A data de término deve ser igual ou posterior à data de início');
     }
 
+    if (data.budget !== undefined && data.budget !== null && data.budget < 0) {
+      throw new ValidationError('Orçamento não pode ser negativo');
+    }
+
+    if (
+      data.numberOfPeople !== undefined &&
+      data.numberOfPeople !== null &&
+      (!Number.isInteger(data.numberOfPeople) || data.numberOfPeople < 1)
+    ) {
+      throw new ValidationError('Número de pessoas deve ser pelo menos 1');
+    }
+
+    if (isUpdate && data.currency !== undefined && data.budget === undefined) {
+      throw new ValidationError('Informe o orçamento ao alterar a moeda da viagem');
+    }
+
+    const currency = data.currency?.toUpperCase() ?? null;
+
+    if (
+      currency !== null &&
+      !SUPPORTED_CURRENCIES.includes(currency as (typeof SUPPORTED_CURRENCIES)[number])
+    ) {
+      throw new ValidationError('Moeda não suportada');
+    }
+
     return {
       name: data.name.trim(),
       destination: data.destination.trim(),
       startDate,
       endDate,
       budget: data.budget ?? null,
+      currency: currency ?? 'BRL',
       numberOfPeople: data.numberOfPeople ?? null,
     };
   }

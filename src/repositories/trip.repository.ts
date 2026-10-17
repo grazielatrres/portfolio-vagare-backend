@@ -7,6 +7,7 @@ export interface CreateTripData {
   startDate: Date;
   endDate: Date;
   budget?: Prisma.Decimal | number | null;
+  currency: string;
   numberOfPeople?: number | null;
 }
 
@@ -22,6 +23,7 @@ export class TripRepository {
         startDate: data.startDate,
         endDate: data.endDate,
         budget: data.budget ?? null,
+        currency: data.currency,
         numberOfPeople: data.numberOfPeople ?? null,
       },
     });
@@ -32,6 +34,10 @@ export class TripRepository {
       where: { userId },
       orderBy: { startDate: 'asc' },
     });
+  }
+
+  async countByUser(userId: string): Promise<number> {
+    return prisma.trip.count({ where: { userId } });
   }
 
   async findByIdAndUser(id: string, userId: string): Promise<Trip | null> {
@@ -54,6 +60,7 @@ export class TripRepository {
         ...(data.startDate !== undefined && { startDate: data.startDate }),
         ...(data.endDate !== undefined && { endDate: data.endDate }),
         ...(data.budget !== undefined && { budget: data.budget }),
+        ...(data.currency !== undefined && { currency: data.currency }),
         ...(data.numberOfPeople !== undefined && { numberOfPeople: data.numberOfPeople }),
       },
     });

@@ -1,3 +1,5 @@
+// trip.repository.test.ts — RF06, RF08, RF09, RF10, RN01, RN10
+
 import { prisma } from '../src/config/prisma';
 import { TripRepository } from '../src/repositories/trip.repository';
 import { buildTrip } from './helpers/trip.factory';

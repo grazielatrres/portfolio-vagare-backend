@@ -1,59 +1,86 @@
 # Vagare Backend
 
-API do aplicativo **Vagare** (planejamento de viagens) — TCC de Engenharia de Software.
+API do aplicativo Vagare, um app de planejamento de viagens. TCC de Engenharia de Software.
 
 Stack: Node.js, Express, TypeScript, PostgreSQL, Prisma, JWT, Jest.
 
 ## Pré-requisitos
 
 - Node.js 20+
-- Docker (para o PostgreSQL) **ou** PostgreSQL local
+- Docker Desktop (para o PostgreSQL)
 
-## Setup local
+## Instalação
 
 ```bash
-# 1. Instalar dependências
 npm install
-
-# 2. Configurar ambiente
 cp .env.example .env
-# Edite JWT_SECRET e, se necessário, DATABASE_URL / GOOGLE_CLIENT_ID
+```
 
-# 3. Subir o PostgreSQL
+Edite o arquivo `.env` e ajuste `JWT_SECRET` e, se necessário, `DATABASE_URL` e `GOOGLE_CLIENT_ID`.
+
+## Banco de dados
+
+Suba o Postgres com Docker:
+
+```bash
 docker compose up -d
+```
 
-# 4. Aplicar migrations e gerar o Prisma Client
+Isso cria um container chamado `vagare-postgres` na porta 5432, com os dados persistidos em um volume Docker. Se a porta 5432 já estiver em uso por outro Postgres na sua máquina, pare o outro serviço ou altere a porta no `docker-compose.yml` e no `DATABASE_URL` do `.env`.
+
+Aplique as migrations e gere o Prisma Client:
+
+```bash
 npx prisma migrate deploy
 npx prisma generate
+```
 
-# 5. Rodar em desenvolvimento
+## Rodando o projeto
+
+```bash
 npm run dev
 ```
 
-API disponível em `http://localhost:3000`.
+A API fica disponível em `http://localhost:3000`.
+
+### Rodando o backend com Docker
+
+Para subir banco e API juntos, sem precisar de Node instalado:
+
+```bash
+docker compose up -d --build
+```
+
+O container `vagare-api` aguarda o Postgres ficar saudável, aplica as migrations (`prisma migrate deploy`) e inicia o servidor em `http://localhost:3000`. As variáveis vêm do `.env`, exceto `DATABASE_URL`, que o compose sobrescreve para apontar para o serviço `postgres`. Após mudar o código, rode `docker compose up -d --build` de novo. Logs: `docker compose logs -f api`.
+
+Para subir só o banco e rodar a API localmente com `npm run dev`: `docker compose up -d postgres`.
+
+Para parar tudo: `docker compose down` (mantém os dados) ou `docker compose down -v` (apaga os dados).
+
+## Scripts
+
+| Script | Descrição |
+|---|---|
+| npm run dev | Servidor com hot reload |
+| npm run build | Compila TypeScript |
+| npm start | Sobe o build de produção |
+| npm test | Testes (Jest) |
+| npm run test:coverage | Testes com relatório de cobertura |
+| npm run lint | ESLint e Prettier |
+| npm run prisma:migrate | Cria e aplica uma nova migration |
+| npm run prisma:studio | Interface visual do banco |
 
 ## Endpoints de autenticação
 
 | Método | Rota | Descrição |
-|--------|------|-----------|
-| `POST` | `/auth/register` | Cadastro local (nome, e-mail, senha) → JWT |
-| `POST` | `/auth/login` | Login local (e-mail, senha) → JWT |
-| `POST` | `/auth/google` | Login Google (`{ "token": "<id_token>" }`) → JWT |
-| `GET` | `/health` | Health check |
+|---|---|---|
+| POST | /auth/register | Cadastro local (nome, e-mail, senha) |
+| POST | /auth/login | Login local (e-mail, senha) |
+| POST | /auth/google | Login com Google (token do Google) |
+| POST | /auth/logout | Encerra a sessão do token atual |
+| GET | /health | Health check |
 
-## Endpoints de viagens (JWT obrigatório)
-
-| Método | Rota | Descrição |
-|--------|------|-----------|
-| `POST` | `/trips` | Cria viagem → 201 |
-| `GET` | `/trips` | Lista viagens do usuário → 200 |
-| `GET` | `/trips/:id` | Detalhe → 200 / 404 |
-| `PUT` | `/trips/:id` | Edita viagem → 200 / 404 |
-| `DELETE` | `/trips/:id` | Exclui viagem → 204 / 404 |
-
-Collection Insomnia do fluxo completo: `insomnia/vagare-trips.json` (guia em `insomnia/README-trips.md`).
-
-Exemplo de registro (Insomnia/curl):
+Exemplo de cadastro:
 
 ```bash
 curl -X POST http://localhost:3000/auth/register \
@@ -61,34 +88,45 @@ curl -X POST http://localhost:3000/auth/register \
   -d '{"name":"Maria","email":"maria@example.com","password":"senha123"}'
 ```
 
-Rotas autenticadas futuras devem enviar:
+Rotas autenticadas exigem o cabeçalho:
 
-```http
+```
 Authorization: Bearer <token>
 ```
 
-## Scripts
+## Endpoints de viagens
 
-| Script | Descrição |
-|--------|-----------|
-| `npm run dev` | Servidor com hot reload |
-| `npm run build` | Compila TypeScript |
-| `npm start` | Sobe o build de produção |
-| `npm test` | Testes (Jest) |
-| `npm run test:coverage` | Testes + cobertura (meta ≥ 75%) |
-| `npm run lint` | ESLint + Prettier |
+Todas exigem autenticação (JWT).
 
-## Estrutura
+| Método | Rota | Descrição |
+|---|---|---|
+| POST | /trips | Cria viagem |
+| GET | /trips | Lista viagens do usuário |
+| GET | /trips/:id | Detalhe da viagem |
+| PUT | /trips/:id | Edita viagem |
+| DELETE | /trips/:id | Exclui viagem |
+
+## Endpoints de perfil
+
+Todas exigem autenticação (JWT).
+
+| Método | Rota | Descrição |
+|---|---|---|
+| GET | /users/me | Dados do usuário autenticado e estatísticas |
+| PUT | /users/me | Edita nome e/ou e-mail |
+| DELETE | /users/me | Exclui a conta e todos os dados vinculados |
+
+## Estrutura do projeto
 
 ```
 src/
-  controllers/   # HTTP
-  services/      # Regras de negócio
-  repositories/  # Acesso ao banco (Prisma)
+  controllers/   HTTP
+  services/      regras de negócio
+  repositories/  acesso ao banco (Prisma)
   routes/
   middlewares/
   config/
   types/
 ```
 
-Fluxo: **route → controller → service → repository → banco**.
+Fluxo de uma requisição: route, controller, service, repository, banco.

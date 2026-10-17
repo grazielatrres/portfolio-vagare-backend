@@ -11,6 +11,26 @@ services:
       POSTGRES_DB: vagare
     volumes:
       - vagare_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d vagare']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    container_name: vagare-api
+    restart: unless-stopped
+    ports:
+      - '${PORT:-3000}:${PORT:-3000}'
+    env_file:
+      - .env
+    environment:
+      # Dentro da rede do Docker o host do banco é o nome do serviço, não localhost
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/vagare?schema=public
+    depends_on:
+      postgres:
+        condition: service_healthy
 
 volumes:
   vagare_pg_data:

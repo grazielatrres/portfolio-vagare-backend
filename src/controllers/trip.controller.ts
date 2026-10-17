@@ -62,8 +62,9 @@ export class TripController {
   }
 
   private extractPayload(req: Request): TripPayload {
-    const { name, destination, startDate, endDate, budget, numberOfPeople } = req.body as TripPayload;
-    return { name, destination, startDate, endDate, budget, numberOfPeople };
+    const { name, destination, startDate, endDate, budget, currency, numberOfPeople } =
+      req.body as TripPayload;
+    return { name, destination, startDate, endDate, budget, currency, numberOfPeople };
   }
 
   private mapError(error: unknown): unknown {
