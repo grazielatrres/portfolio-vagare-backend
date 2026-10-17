@@ -12,6 +12,8 @@ export interface CreateActivityData {
   description?: string | null;
 }
 
+export type UpdateActivityData = CreateActivityData;
+
 export class ActivityRepository {
   async create(tripId: string, data: CreateActivityData): Promise<Activity> {
     return prisma.activity.create({
@@ -42,9 +44,40 @@ export class ActivityRepository {
     });
   }
 
-  async findByTripDateAndTime(tripId: string, date: Date, time: Date): Promise<Activity | null> {
+  async findByTripDateAndTime(
+    tripId: string,
+    date: Date,
+    time: Date,
+    excludeId?: string,
+  ): Promise<Activity | null> {
     return prisma.activity.findFirst({
-      where: { tripId, date, time },
+      where: {
+        tripId,
+        date,
+        time,
+        ...(excludeId && { id: { not: excludeId } }),
+      },
+    });
+  }
+
+  async update(id: string, tripId: string, data: UpdateActivityData): Promise<Activity | null> {
+    const existing = await this.findByIdAndTrip(id, tripId);
+    if (!existing) {
+      return null;
+    }
+
+    return prisma.activity.update({
+      where: { id },
+      data: {
+        name: data.name,
+        date: data.date,
+        time: data.time ?? null,
+        location: data.location ?? null,
+        period: data.period ?? null,
+        category: data.category ?? null,
+        estimatedCost: data.estimatedCost ?? null,
+        description: data.description ?? null,
+      },
     });
   }
 

@@ -1,4 +1,4 @@
-// activity.repository.test.ts — RF12, RF13
+// activity.repository.test.ts — RF12, RF13, RF14
 
 import { prisma } from '../src/config/prisma';
 import { ActivityRepository } from '../src/repositories/activity.repository';
@@ -10,6 +10,7 @@ jest.mock('../src/config/prisma', () => ({
       create: jest.fn(),
       findMany: jest.fn(),
       findFirst: jest.fn(),
+      update: jest.fn(),
       delete: jest.fn(),
     },
   },
@@ -19,6 +20,7 @@ const prismaActivity = prisma.activity as unknown as {
   create: jest.Mock;
   findMany: jest.Mock;
   findFirst: jest.Mock;
+  update: jest.Mock;
   delete: jest.Mock;
 };
 
@@ -115,6 +117,66 @@ describe('ActivityRepository', () => {
         new Date(Date.UTC(1970, 0, 1, 14, 30, 0)),
       );
 
+      expect(result).toBeNull();
+    });
+
+    it('exclui a própria atividade da checagem quando excludeId é informado', async () => {
+      const date = new Date('2026-09-02');
+      const time = new Date(Date.UTC(1970, 0, 1, 14, 30, 0));
+      prismaActivity.findFirst.mockResolvedValue(null);
+
+      await repository.findByTripDateAndTime(tripId, date, time, 'activity-1');
+
+      expect(prismaActivity.findFirst).toHaveBeenCalledWith({
+        where: { tripId, date, time, id: { not: 'activity-1' } },
+      });
+    });
+  });
+
+  describe('update', () => {
+    it('atualiza a atividade quando ela pertence à viagem', async () => {
+      const existing = buildActivity();
+      const updated = buildActivity({ name: 'Red Beach' });
+      const data = {
+        name: 'Red Beach',
+        date: new Date('2026-09-02'),
+        time: null,
+        location: null,
+        period: null,
+        category: null,
+        estimatedCost: null,
+        description: null,
+      };
+      prismaActivity.findFirst.mockResolvedValue(existing);
+      prismaActivity.update.mockResolvedValue(updated);
+
+      const result = await repository.update('activity-1', tripId, data);
+
+      expect(prismaActivity.update).toHaveBeenCalledWith({
+        where: { id: 'activity-1' },
+        data: {
+          name: data.name,
+          date: data.date,
+          time: null,
+          location: null,
+          period: null,
+          category: null,
+          estimatedCost: null,
+          description: null,
+        },
+      });
+      expect(result).toEqual(updated);
+    });
+
+    it('não chama update e retorna null se a atividade não pertencer à viagem', async () => {
+      prismaActivity.findFirst.mockResolvedValue(null);
+
+      const result = await repository.update('activity-1', otherTripId, {
+        name: 'Red Beach',
+        date: new Date('2026-09-02'),
+      });
+
+      expect(prismaActivity.update).not.toHaveBeenCalled();
       expect(result).toBeNull();
     });
   });
