@@ -8,6 +8,8 @@ const SUPPORTED_CURRENCIES = ['BRL', 'USD', 'EUR'] as const;
 export interface TripPayload {
   name: string;
   destination: string;
+  latitude?: number | null;
+  longitude?: number | null;
   startDate: Date | string;
   endDate: Date | string;
   budget?: number | null;
@@ -60,6 +62,22 @@ export class TripService {
     }
 
     if (
+      data.latitude !== undefined &&
+      data.latitude !== null &&
+      (data.latitude < -90 || data.latitude > 90)
+    ) {
+      throw new ValidationError('Latitude inválida');
+    }
+
+    if (
+      data.longitude !== undefined &&
+      data.longitude !== null &&
+      (data.longitude < -180 || data.longitude > 180)
+    ) {
+      throw new ValidationError('Longitude inválida');
+    }
+
+    if (
       data.numberOfPeople !== undefined &&
       data.numberOfPeople !== null &&
       (!Number.isInteger(data.numberOfPeople) || data.numberOfPeople < 1)
@@ -83,6 +101,8 @@ export class TripService {
     return {
       name: data.name.trim(),
       destination: data.destination.trim(),
+      latitude: data.latitude ?? null,
+      longitude: data.longitude ?? null,
       startDate,
       endDate,
       budget: data.budget ?? null,
