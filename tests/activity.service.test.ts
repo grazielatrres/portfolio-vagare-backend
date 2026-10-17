@@ -1,4 +1,4 @@
-// activity.service.test.ts — RF12, RF13, RN01, RN07
+// activity.service.test.ts — RF12, RF13, RF14, RN01, RN07
 import { ActivityRepository } from '../src/repositories/activity.repository';
 import { TripRepository } from '../src/repositories/trip.repository';
 import { ActivityService } from '../src/services/activity.service';
@@ -35,6 +35,7 @@ describe('ActivityService', () => {
       findAllByTrip: jest.fn(),
       findByIdAndTrip: jest.fn(),
       findByTripDateAndTime: jest.fn(),
+      update: jest.fn(),
       delete: jest.fn(),
     } as unknown as jest.Mocked<ActivityRepository>;
 
@@ -214,6 +215,87 @@ describe('ActivityService', () => {
 
       expect(activityRepository.findByTripDateAndTime).not.toHaveBeenCalled();
       expect(activityRepository.create).toHaveBeenCalled();
+    });
+  });
+
+  describe('updateActivity', () => {
+    it('atualiza atividade com dados válidos', async () => {
+      tripRepository.findByIdAndUser.mockResolvedValue(trip);
+      activityRepository.findByTripDateAndTime.mockResolvedValue(null);
+      const updated = buildActivity({ name: 'Red Beach' });
+      activityRepository.update.mockResolvedValue(updated);
+
+      const result = await activityService.updateActivity(
+        'activity-1',
+        'trip-1',
+        'user-1',
+        validPayload,
+      );
+
+      expect(activityRepository.update).toHaveBeenCalledWith(
+        'activity-1',
+        'trip-1',
+        expect.objectContaining({ name: 'Red Beach', location: 'Oia, Santorini' }),
+      );
+      expect(result).toEqual(updated);
+    });
+
+    it('lança NotFoundError quando a viagem não pertence ao usuário (RN01)', async () => {
+      tripRepository.findByIdAndUser.mockResolvedValue(null);
+
+      await expect(
+        activityService.updateActivity('activity-1', 'trip-1', 'user-1', validPayload),
+      ).rejects.toBeInstanceOf(NotFoundError);
+      expect(activityRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('lança NotFoundError quando a atividade não existe na viagem', async () => {
+      tripRepository.findByIdAndUser.mockResolvedValue(trip);
+      activityRepository.findByTripDateAndTime.mockResolvedValue(null);
+      activityRepository.update.mockResolvedValue(null);
+
+      await expect(
+        activityService.updateActivity('activity-1', 'trip-1', 'user-1', validPayload),
+      ).rejects.toBeInstanceOf(NotFoundError);
+    });
+
+    it('lança ValidationError quando a data é anterior ao início da viagem (RN07)', async () => {
+      tripRepository.findByIdAndUser.mockResolvedValue(trip);
+
+      await expect(
+        activityService.updateActivity('activity-1', 'trip-1', 'user-1', {
+          ...validPayload,
+          date: '2026-08-31',
+        }),
+      ).rejects.toBeInstanceOf(ValidationError);
+      expect(activityRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('lança ValidationError quando já existe outra atividade no mesmo dia e horário', async () => {
+      tripRepository.findByIdAndUser.mockResolvedValue(trip);
+      activityRepository.findByTripDateAndTime.mockResolvedValue(
+        buildActivity({ id: 'activity-2' }),
+      );
+
+      await expect(
+        activityService.updateActivity('activity-1', 'trip-1', 'user-1', validPayload),
+      ).rejects.toBeInstanceOf(ValidationError);
+      expect(activityRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('exclui a própria atividade da checagem de conflito de horário', async () => {
+      tripRepository.findByIdAndUser.mockResolvedValue(trip);
+      activityRepository.findByTripDateAndTime.mockResolvedValue(null);
+      activityRepository.update.mockResolvedValue(buildActivity());
+
+      await activityService.updateActivity('activity-1', 'trip-1', 'user-1', validPayload);
+
+      expect(activityRepository.findByTripDateAndTime).toHaveBeenCalledWith(
+        'trip-1',
+        expect.any(Date),
+        expect.any(Date),
+        'activity-1',
+      );
     });
   });
 
