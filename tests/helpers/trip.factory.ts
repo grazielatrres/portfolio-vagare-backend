@@ -16,6 +16,7 @@ export function buildTrip(overrides: TripFactoryOverrides = {}): Trip {
     startDate: new Date('2026-09-01'),
     endDate: new Date('2026-09-10'),
     budget: null,
+    currency: 'BRL',
     numberOfPeople: null,
     createdAt: now,
     updatedAt: now,
