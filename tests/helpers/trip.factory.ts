@@ -11,6 +11,8 @@ export function buildTrip(overrides: TripFactoryOverrides = {}): Trip {
     userId: 'user-1',
     name: 'Férias em Florença',
     destination: 'Florença, Itália',
+    latitude: null,
+    longitude: null,
     startDate: new Date('2026-09-01'),
     endDate: new Date('2026-09-10'),
     budget: null,

@@ -47,6 +47,8 @@ describe('TripRepository', () => {
           userId,
           name: data.name,
           destination: data.destination,
+          latitude: null,
+          longitude: null,
           startDate: data.startDate,
           endDate: data.endDate,
           budget: data.budget,

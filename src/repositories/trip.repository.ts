@@ -4,6 +4,8 @@ import { prisma } from '../config/prisma';
 export interface CreateTripData {
   name: string;
   destination: string;
+  latitude?: Prisma.Decimal | number | null;
+  longitude?: Prisma.Decimal | number | null;
   startDate: Date;
   endDate: Date;
   budget?: Prisma.Decimal | number | null;
@@ -20,6 +22,8 @@ export class TripRepository {
         userId,
         name: data.name,
         destination: data.destination,
+        latitude: data.latitude ?? null,
+        longitude: data.longitude ?? null,
         startDate: data.startDate,
         endDate: data.endDate,
         budget: data.budget ?? null,
@@ -57,6 +61,8 @@ export class TripRepository {
       data: {
         ...(data.name !== undefined && { name: data.name }),
         ...(data.destination !== undefined && { destination: data.destination }),
+        ...(data.latitude !== undefined && { latitude: data.latitude }),
+        ...(data.longitude !== undefined && { longitude: data.longitude }),
         ...(data.startDate !== undefined && { startDate: data.startDate }),
         ...(data.endDate !== undefined && { endDate: data.endDate }),
         ...(data.budget !== undefined && { budget: data.budget }),
