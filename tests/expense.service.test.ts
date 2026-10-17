@@ -124,12 +124,29 @@ describe('ExpenseService', () => {
       ).rejects.toBeInstanceOf(ValidationError);
     });
 
-    it('lança ValidationError quando a moeda não é suportada', async () => {
+    it('lança ValidationError quando a moeda do gasto diverge da moeda da viagem', async () => {
       tripRepository.findByIdAndUser.mockResolvedValue(trip);
 
       await expect(
-        expenseService.createExpense('trip-1', 'user-1', { ...validPayload, currency: 'JPY' }),
+        expenseService.createExpense('trip-1', 'user-1', { ...validPayload, currency: 'USD' }),
       ).rejects.toBeInstanceOf(ValidationError);
+      expect(expenseRepository.create).not.toHaveBeenCalled();
+    });
+
+    it('usa a moeda da viagem quando o gasto não informa moeda', async () => {
+      const eurTrip = buildTrip({ id: 'trip-2', userId: 'user-1', currency: 'EUR' });
+      tripRepository.findByIdAndUser.mockResolvedValue(eurTrip);
+      expenseRepository.create.mockResolvedValue(buildExpense({ currency: 'EUR' }));
+
+      await expenseService.createExpense('trip-2', 'user-1', {
+        description: 'Jantar',
+        amount: 40,
+      });
+
+      expect(expenseRepository.create).toHaveBeenCalledWith(
+        'trip-2',
+        expect.objectContaining({ currency: 'EUR' }),
+      );
     });
 
     it('lança NotFoundError quando a viagem não pertence ao usuário (RN01)', async () => {

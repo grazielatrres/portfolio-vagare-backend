@@ -5,7 +5,6 @@ import { NotFoundError, ValidationError } from '../types/errors';
 
 const TRIP_NOT_FOUND = 'Viagem não encontrada';
 const EXPENSE_NOT_FOUND = 'Gasto não encontrado';
-const SUPPORTED_CURRENCIES = ['BRL', 'USD', 'EUR'] as const;
 
 export interface ExpensePayload {
   description: string;
@@ -26,8 +25,8 @@ export class ExpenseService {
   }
 
   async createExpense(tripId: string, userId: string, data: ExpensePayload): Promise<Expense> {
-    await this.ensureTripAccess(tripId, userId);
-    const payload = this.validatePayload(data);
+    const trip = await this.ensureTripAccess(tripId, userId);
+    const payload = this.validatePayload(data, trip.currency);
     return this.expenseRepository.create(tripId, payload);
   }
 
@@ -37,8 +36,8 @@ export class ExpenseService {
     userId: string,
     data: ExpensePayload,
   ): Promise<Expense> {
-    await this.ensureTripAccess(tripId, userId);
-    const payload = this.validatePayload(data);
+    const trip = await this.ensureTripAccess(tripId, userId);
+    const payload = this.validatePayload(data, trip.currency);
 
     const expense = await this.expenseRepository.update(id, tripId, payload);
     if (!expense) {
@@ -64,7 +63,7 @@ export class ExpenseService {
     return trip;
   }
 
-  private validatePayload(data: ExpensePayload): CreateExpenseData {
+  private validatePayload(data: ExpensePayload, tripCurrency: string): CreateExpenseData {
     if (!this.hasText(data.description)) {
       throw new ValidationError('Descrição é obrigatória');
     }
@@ -73,9 +72,12 @@ export class ExpenseService {
       throw new ValidationError('Valor deve ser maior que zero');
     }
 
-    const currency = data.currency ? data.currency.toUpperCase() : 'BRL';
-    if (!SUPPORTED_CURRENCIES.includes(currency as (typeof SUPPORTED_CURRENCIES)[number])) {
-      throw new ValidationError('Moeda não suportada');
+    // O gasto precisa estar na mesma moeda da viagem: o resumo de orçamento soma
+    // Expense.amount e Activity.estimatedCost diretamente (RN05), sem conversão
+    // cambial, então moedas divergentes quebrariam o cálculo do saldo.
+    const currency = data.currency ? data.currency.toUpperCase() : tripCurrency;
+    if (currency !== tripCurrency) {
+      throw new ValidationError(`A moeda do gasto deve ser a mesma da viagem (${tripCurrency})`);
     }
 
     return {
