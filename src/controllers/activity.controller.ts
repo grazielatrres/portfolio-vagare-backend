@@ -30,6 +30,20 @@ export class ActivityController {
     }
   }
 
+  async update(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const activity = await this.activityService.updateActivity(
+        req.params.id,
+        req.params.tripId,
+        this.getUserId(req),
+        this.extractPayload(req),
+      );
+      res.status(200).json(activity);
+    } catch (error) {
+      next(this.mapError(error));
+    }
+  }
+
   async delete(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       await this.activityService.deleteActivity(

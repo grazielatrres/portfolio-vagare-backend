@@ -1,4 +1,4 @@
-// activity.integration.test.ts — RF12, RF13, RN01, RN07, RNF07
+// activity.integration.test.ts — RF12, RF13, RF14, RN01, RN07, RNF07
 
 import { AuthProvider, User } from '@prisma/client';
 import jwt from 'jsonwebtoken';
@@ -24,6 +24,7 @@ jest.mock('../src/config/prisma', () => ({
       create: jest.fn(),
       findMany: jest.fn(),
       findFirst: jest.fn(),
+      update: jest.fn(),
       delete: jest.fn(),
     },
   },
@@ -36,6 +37,7 @@ const prismaActivity = prisma.activity as unknown as {
   create: jest.Mock;
   findMany: jest.Mock;
   findFirst: jest.Mock;
+  update: jest.Mock;
   delete: jest.Mock;
 };
 
@@ -169,6 +171,68 @@ describe('Activity endpoints (integração)', () => {
 
       expect(response.status).toBe(404);
       expect(prismaActivity.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('PUT /trips/:tripId/activities/:id', () => {
+    it('atualiza atividade e retorna 200', async () => {
+      prismaTrip.findFirst.mockResolvedValue(trip);
+      const activity = buildActivity();
+      // 1ª chamada: checagem de conflito de horário (sem conflito); 2ª chamada: busca de posse da atividade
+      prismaActivity.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce(activity);
+      prismaActivity.update.mockResolvedValue({ ...activity, name: 'Red Beach (atualizado)' });
+
+      const response = await request(app)
+        .put(`/trips/${trip.id}/activities/${activity.id}`)
+        .set('Authorization', authHeader(owner))
+        .send({ ...activityPayload, name: 'Red Beach (atualizado)' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.name).toBe('Red Beach (atualizado)');
+      expect(prismaActivity.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: activity.id },
+          data: expect.objectContaining({ name: 'Red Beach (atualizado)' }),
+        }),
+      );
+    });
+
+    it('retorna 400 quando a data está fora do período da viagem (RN07)', async () => {
+      prismaTrip.findFirst.mockResolvedValue(trip);
+      prismaActivity.findFirst.mockResolvedValue(buildActivity());
+
+      const response = await request(app)
+        .put(`/trips/${trip.id}/activities/activity-1`)
+        .set('Authorization', authHeader(owner))
+        .send({ ...activityPayload, date: '2026-12-25' });
+
+      expect(response.status).toBe(400);
+      expect(prismaActivity.update).not.toHaveBeenCalled();
+    });
+
+    it('retorna 404 ao atualizar atividade que não existe na viagem', async () => {
+      prismaTrip.findFirst.mockResolvedValue(trip);
+      prismaActivity.findFirst.mockResolvedValue(null);
+
+      const response = await request(app)
+        .put(`/trips/${trip.id}/activities/activity-inexistente`)
+        .set('Authorization', authHeader(owner))
+        .send(activityPayload);
+
+      expect(response.status).toBe(404);
+      expect(prismaActivity.update).not.toHaveBeenCalled();
+    });
+
+    it('retorna 404 ao tentar atualizar atividade de viagem de outro usuário (RN01)', async () => {
+      prismaTrip.findFirst.mockResolvedValue(null);
+
+      const response = await request(app)
+        .put(`/trips/${trip.id}/activities/activity-1`)
+        .set('Authorization', authHeader(otherUser))
+        .send(activityPayload);
+
+      expect(response.status).toBe(404);
+      expect(prismaActivity.update).not.toHaveBeenCalled();
     });
   });
 

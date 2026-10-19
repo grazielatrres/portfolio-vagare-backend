@@ -8,6 +8,7 @@ activityRoutes.use(authMiddleware);
 
 activityRoutes.get('/', (req, res, next) => activityController.list(req, res, next));
 activityRoutes.post('/', (req, res, next) => activityController.create(req, res, next));
+activityRoutes.put('/:id', (req, res, next) => activityController.update(req, res, next));
 activityRoutes.delete('/:id', (req, res, next) => activityController.delete(req, res, next));
 
 export { activityRoutes };
