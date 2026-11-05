@@ -91,13 +91,13 @@ describe('Profile endpoints (integração)', () => {
   });
 
   describe('PUT /users/me', () => {
-    it('edita nome e e-mail e retorna 200', async () => {
+    it('edita o nome e retorna 200', async () => {
       prismaUser.update.mockResolvedValue(buildUser({ name: 'Maria Souza' }));
 
       const response = await request(app)
         .put('/users/me')
         .set('Authorization', authHeader(owner))
-        .send({ name: 'Maria Souza', email: 'maria@example.com' });
+        .send({ name: 'Maria Souza' });
 
       expect(response.status).toBe(200);
       expect(response.body.name).toBe('Maria Souza');
@@ -112,6 +112,22 @@ describe('Profile endpoints (integração)', () => {
       expect(response.status).toBe(400);
       expect(response.body).toEqual({ error: 'Nome não pode ser vazio' });
       expect(prismaUser.update).not.toHaveBeenCalled();
+    });
+
+    it('ignora o e-mail enviado, pois o campo é bloqueado para edição', async () => {
+      prismaUser.update.mockResolvedValue(buildUser({ name: 'Maria Souza' }));
+
+      const response = await request(app)
+        .put('/users/me')
+        .set('Authorization', authHeader(owner))
+        .send({ name: 'Maria Souza', email: 'outro@example.com' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.email).toBe(owner.email);
+      expect(prismaUser.update).toHaveBeenCalledWith({
+        where: { id: owner.id },
+        data: { name: 'Maria Souza' },
+      });
     });
   });
 

@@ -1,11 +1,10 @@
 import { AuthProvider, User } from '@prisma/client';
 import { UserRepository } from '../repositories/auth/user.repository';
 import { TripRepository } from '../repositories/trip.repository';
-import { AppError, NotFoundError, ValidationError } from '../types/errors';
+import { NotFoundError, ValidationError } from '../types/errors';
 
 export interface ProfilePayload {
   name?: string;
-  email?: string;
 }
 
 export interface ProfileResponse {
@@ -33,16 +32,8 @@ export class ProfileService {
   async updateProfile(userId: string, data: ProfilePayload): Promise<ProfileResponse> {
     this.validatePayload(data);
 
-    if (data.email !== undefined) {
-      const existing = await this.userRepository.findByEmail(data.email.toLowerCase().trim());
-      if (existing && existing.id !== userId) {
-        throw new AppError('E-mail já cadastrado', 409);
-      }
-    }
-
     const updated = await this.userRepository.update(userId, {
       ...(data.name !== undefined && { name: data.name.trim() }),
-      ...(data.email !== undefined && { email: data.email.toLowerCase().trim() }),
     });
 
     return this.buildResponse(updated);
@@ -57,9 +48,6 @@ export class ProfileService {
   private validatePayload(data: ProfilePayload): void {
     if (data.name !== undefined && !data.name.trim()) {
       throw new ValidationError('Nome não pode ser vazio');
-    }
-    if (data.email !== undefined && !data.email.trim()) {
-      throw new ValidationError('E-mail não pode ser vazio');
     }
   }
 

@@ -16,8 +16,8 @@ export class ProfileController {
 
   async update(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { name, email } = req.body as ProfilePayload;
-      const profile = await this.profileService.updateProfile(this.getUserId(req), { name, email });
+      const { name } = req.body as ProfilePayload;
+      const profile = await this.profileService.updateProfile(this.getUserId(req), { name });
       res.status(200).json(profile);
     } catch (error) {
       next(this.mapError(error));
