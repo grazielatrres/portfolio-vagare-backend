@@ -1,0 +1,144 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Lint & Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test with coverage (fails below 75%)
+        run: npm run test:coverage
+
+  security:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+
+  deploy:
+    name: Build & Deploy to EC2
+    needs: [test, security]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # O runner do GitHub Actions é amd64; o QEMU habilita compilar para
+      # outra arquitetura (arm64) nele via emulação.
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # A instância EC2 é t4g.micro (Graviton/ARM), por isso a imagem é
+      # construída para linux/arm64 e não para a arquitetura do runner.
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}:latest
+            ghcr.io/${{ github.repository }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-2
+
+      # O Security Group da EC2 só libera a porta 22 para o IP fixo do
+      # desenvolvedor. Como os runners do GitHub Actions usam IPs dinâmicos,
+      # este passo libera, só pela duração do deploy, o IP do runner atual.
+      - name: Allow this runner's IP on port 22
+        run: |
+          RUNNER_IP=$(curl -s https://checkip.amazonaws.com)
+          echo "RUNNER_IP=${RUNNER_IP}" >> "$GITHUB_ENV"
+          aws ec2 authorize-security-group-ingress \
+            --group-id ${{ secrets.EC2_SECURITY_GROUP_ID }} \
+            --protocol tcp --port 22 --cidr "${RUNNER_IP}/32"
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          envs: GH_ACTOR,GH_TOKEN,EC2_APP_DIR
+          script: |
+            set -e
+            echo "$GH_TOKEN" | docker login ghcr.io -u "$GH_ACTOR" --password-stdin
+            cd "$EC2_APP_DIR"
+            docker compose -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.prod.yml up -d
+            docker image prune -f
+        env:
+          GH_ACTOR: ${{ github.actor }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EC2_APP_DIR: ${{ secrets.EC2_APP_DIR }}
+
+      # Revoga a regra mesmo se o deploy falhar, para a porta 22 nunca
+      # ficar aberta ao mundo além da janela do deploy.
+      - name: Revoke this runner's IP from port 22
+        if: always() && env.RUNNER_IP != ''
+        run: |
+          aws ec2 revoke-security-group-ingress \
+            --group-id ${{ secrets.EC2_SECURITY_GROUP_ID }} \
+            --protocol tcp --port 22 --cidr "${{ env.RUNNER_IP }}/32"

@@ -76,9 +76,7 @@ describe('authMiddleware (via GET /users/me)', () => {
   });
 
   it('retorna 401 quando o header não usa o esquema Bearer', async () => {
-    const response = await request(app)
-      .get('/users/me')
-      .set('Authorization', 'Token abc123');
+    const response = await request(app).get('/users/me').set('Authorization', 'Token abc123');
 
     expect(response.status).toBe(401);
     expect(response.body).toEqual({ error: 'Token de autenticação ausente' });
@@ -97,9 +95,7 @@ describe('authMiddleware (via GET /users/me)', () => {
       { expiresIn: -10 },
     );
 
-    const response = await request(app)
-      .get('/users/me')
-      .set('Authorization', `Bearer ${expired}`);
+    const response = await request(app).get('/users/me').set('Authorization', `Bearer ${expired}`);
 
     expect(response.status).toBe(401);
     expect(response.body.error).toMatch(/expirado/i);
