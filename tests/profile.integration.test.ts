@@ -110,12 +110,57 @@ describe('Profile endpoints (integração)', () => {
         .send({ name: '   ' });
 
       expect(response.status).toBe(400);
-      expect(response.body).toEqual({ error: 'Nome não pode ser vazio' });
+      expect(response.body).toEqual({ error: 'Nome é obrigatório' });
       expect(prismaUser.update).not.toHaveBeenCalled();
     });
 
-    it('ignora o e-mail enviado, pois o campo é bloqueado para edição', async () => {
+    it('retorna 400 quando o corpo é vazio', async () => {
+      const response = await request(app)
+        .put('/users/me')
+        .set('Authorization', authHeader(owner))
+        .send({});
+
+      expect(response.status).toBe(400);
+      expect(response.body).toEqual({ error: 'Nome é obrigatório' });
+      expect(prismaUser.update).not.toHaveBeenCalled();
+    });
+
+    it('retorna 400 quando o corpo contém apenas o e-mail', async () => {
+      const response = await request(app)
+        .put('/users/me')
+        .set('Authorization', authHeader(owner))
+        .send({ email: 'outro@example.com' });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toEqual({ error: 'Nome é obrigatório' });
+      expect(prismaUser.update).not.toHaveBeenCalled();
+    });
+
+    it('retorna 400 quando o nome contém apenas espaços', async () => {
+      const response = await request(app)
+        .put('/users/me')
+        .set('Authorization', authHeader(owner))
+        .send({ name: '    ' });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toEqual({ error: 'Nome é obrigatório' });
+      expect(prismaUser.update).not.toHaveBeenCalled();
+    });
+
+    it('retorna 200 quando o nome enviado é válido', async () => {
       prismaUser.update.mockResolvedValue(buildUser({ name: 'Maria Souza' }));
+
+      const response = await request(app)
+        .put('/users/me')
+        .set('Authorization', authHeader(owner))
+        .send({ name: 'Maria Souza' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.name).toBe('Maria Souza');
+    });
+
+    it('ignora o e-mail enviado, pois o campo é bloqueado para edição', async () => {
+      prismaUser.update.mockResolvedValue(buildUser({ ...owner, name: 'Maria Souza' }));
 
       const response = await request(app)
         .put('/users/me')
