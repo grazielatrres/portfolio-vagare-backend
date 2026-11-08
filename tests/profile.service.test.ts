@@ -1,7 +1,7 @@
 // profile.service.test.ts — LGPD 6.4.3 (acesso, correção e exclusão de dados do usuário)
 
 import { AuthProvider, User } from '@prisma/client';
-import { ProfileService } from '../src/services/profile.service';
+import { ProfilePayload, ProfileService } from '../src/services/profile.service';
 import { UserRepository } from '../src/repositories/auth/user.repository';
 import { TripRepository } from '../src/repositories/trip.repository';
 
@@ -85,7 +85,18 @@ describe('ProfileService', () => {
     it('lança ValidationError quando o nome é vazio', async () => {
       await expect(profileService.updateProfile('user-1', { name: '  ' })).rejects.toMatchObject({
         name: 'ValidationError',
-        message: 'Nome não pode ser vazio',
+        message: 'Nome é obrigatório',
+      });
+
+      expect(userRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('lança ValidationError quando o nome não é enviado', async () => {
+      await expect(
+        profileService.updateProfile('user-1', {} as ProfilePayload),
+      ).rejects.toMatchObject({
+        name: 'ValidationError',
+        message: 'Nome é obrigatório',
       });
 
       expect(userRepository.update).not.toHaveBeenCalled();

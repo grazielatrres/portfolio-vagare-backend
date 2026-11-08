@@ -4,7 +4,7 @@ import { TripRepository } from '../repositories/trip.repository';
 import { NotFoundError, ValidationError } from '../types/errors';
 
 export interface ProfilePayload {
-  name?: string;
+  name: string;
 }
 
 export interface ProfileResponse {
@@ -33,7 +33,7 @@ export class ProfileService {
     this.validatePayload(data);
 
     const updated = await this.userRepository.update(userId, {
-      ...(data.name !== undefined && { name: data.name.trim() }),
+      name: data.name.trim(),
     });
 
     return this.buildResponse(updated);
@@ -46,9 +46,13 @@ export class ProfileService {
   }
 
   private validatePayload(data: ProfilePayload): void {
-    if (data.name !== undefined && !data.name.trim()) {
-      throw new ValidationError('Nome não pode ser vazio');
+    if (!this.hasText(data.name)) {
+      throw new ValidationError('Nome é obrigatório');
     }
+  }
+
+  private hasText(value: unknown): value is string {
+    return typeof value === 'string' && value.trim().length > 0;
   }
 
   private ensureFound(user: User | null): User {
