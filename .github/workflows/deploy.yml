@@ -117,6 +117,23 @@ jobs:
             --group-id ${{ secrets.EC2_SECURITY_GROUP_ID }} \
             --protocol tcp --port 22 --cidr "${RUNNER_IP}/32"
 
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      # O servidor não tem o repositório clonado: só a imagem chega lá via
+      # registry. O compose de produção precisa ser enviado a cada deploy
+      # para a EC2 sempre usar a versão da main.
+      - name: Copy docker-compose.prod.yml to EC2
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: docker-compose.prod.yml
+          target: ${{ secrets.EC2_APP_DIR }}
+
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.2.0
         with:
