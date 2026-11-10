@@ -4,7 +4,7 @@ API do aplicativo Vagare, um app de planejamento de viagens. TCC de Engenharia d
 
 Stack: Node.js, Express, TypeScript, PostgreSQL, Prisma, JWT, Jest.
 
-CI/CD: lint, testes com cobertura mínima de 75% e análise de segurança (CodeQL) rodam em todo push/PR; deploy em produção é automático a cada push em `main`. Detalhes em [CI-CD.md](CI-CD.md).
+CI/CD: lint, testes com cobertura mínima de 75% e análise de segurança (CodeQL) rodam em todo push/PR; o deploy em produção é manual, pelo workflow **Deploy** na aba Actions (`Run workflow`), e sempre publica a branch `main`.
 
 ## Pré-requisitos
 
