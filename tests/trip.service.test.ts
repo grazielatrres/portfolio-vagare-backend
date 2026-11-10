@@ -39,6 +39,8 @@ describe('TripService', () => {
       expect(tripRepository.create).toHaveBeenCalledWith('user-1', {
         name: validPayload.name,
         destination: validPayload.destination,
+        latitude: null,
+        longitude: null,
         startDate: validPayload.startDate,
         endDate: validPayload.endDate,
         budget: validPayload.budget,
@@ -115,6 +117,38 @@ describe('TripService', () => {
     it('lança ValidationError quando budget é negativo', async () => {
       await expect(
         tripService.createTrip('user-1', { ...validPayload, budget: -1 }),
+      ).rejects.toBeInstanceOf(ValidationError);
+
+      expect(tripRepository.create).not.toHaveBeenCalled();
+    });
+
+    it('aceita latitude e longitude válidas e repassa pro repositório', async () => {
+      const created = buildTrip();
+      tripRepository.create.mockResolvedValue(created);
+
+      await tripService.createTrip('user-1', {
+        ...validPayload,
+        latitude: 36.4071,
+        longitude: 25.4566,
+      });
+
+      expect(tripRepository.create).toHaveBeenCalledWith(
+        'user-1',
+        expect.objectContaining({ latitude: 36.4071, longitude: 25.4566 }),
+      );
+    });
+
+    it('lança ValidationError quando latitude está fora do intervalo -90..90', async () => {
+      await expect(
+        tripService.createTrip('user-1', { ...validPayload, latitude: 91 }),
+      ).rejects.toBeInstanceOf(ValidationError);
+
+      expect(tripRepository.create).not.toHaveBeenCalled();
+    });
+
+    it('lança ValidationError quando longitude está fora do intervalo -180..180', async () => {
+      await expect(
+        tripService.createTrip('user-1', { ...validPayload, longitude: -181 }),
       ).rejects.toBeInstanceOf(ValidationError);
 
       expect(tripRepository.create).not.toHaveBeenCalled();

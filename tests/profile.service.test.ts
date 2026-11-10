@@ -1,7 +1,7 @@
 // profile.service.test.ts — LGPD 6.4.3 (acesso, correção e exclusão de dados do usuário)
 
 import { AuthProvider, User } from '@prisma/client';
-import { ProfileService } from '../src/services/profile.service';
+import { ProfilePayload, ProfileService } from '../src/services/profile.service';
 import { UserRepository } from '../src/repositories/auth/user.repository';
 import { TripRepository } from '../src/repositories/trip.repository';
 
@@ -69,56 +69,51 @@ describe('ProfileService', () => {
   });
 
   describe('updateProfile', () => {
-    it('atualiza nome e e-mail', async () => {
-      userRepository.findByEmail.mockResolvedValue(null);
-      userRepository.update.mockResolvedValue(
-        buildUser({ name: 'Maria Souza', email: 'nova@example.com' }),
-      );
+    it('atualiza o nome', async () => {
+      userRepository.update.mockResolvedValue(buildUser({ name: 'Maria Souza' }));
 
       const result = await profileService.updateProfile('user-1', {
         name: 'Maria Souza',
-        email: 'nova@example.com',
       });
 
       expect(userRepository.update).toHaveBeenCalledWith('user-1', {
         name: 'Maria Souza',
-        email: 'nova@example.com',
       });
       expect(result.name).toBe('Maria Souza');
-      expect(result.email).toBe('nova@example.com');
     });
 
     it('lança ValidationError quando o nome é vazio', async () => {
       await expect(profileService.updateProfile('user-1', { name: '  ' })).rejects.toMatchObject({
         name: 'ValidationError',
-        message: 'Nome não pode ser vazio',
+        message: 'Nome é obrigatório',
       });
 
       expect(userRepository.update).not.toHaveBeenCalled();
     });
 
-    it('retorna 409 quando o novo e-mail já pertence a outra conta', async () => {
-      userRepository.findByEmail.mockResolvedValue(buildUser({ id: 'user-2' }));
-
+    it('lança ValidationError quando o nome não é enviado', async () => {
       await expect(
-        profileService.updateProfile('user-1', { email: 'maria@example.com' }),
+        profileService.updateProfile('user-1', {} as ProfilePayload),
       ).rejects.toMatchObject({
-        statusCode: 409,
-        message: 'E-mail já cadastrado',
+        name: 'ValidationError',
+        message: 'Nome é obrigatório',
       });
 
       expect(userRepository.update).not.toHaveBeenCalled();
     });
 
-    it('permite manter o mesmo e-mail do próprio usuário', async () => {
-      userRepository.findByEmail.mockResolvedValue(buildUser({ id: 'user-1' }));
-      userRepository.update.mockResolvedValue(buildUser());
+    it('ignora o e-mail enviado no payload, pois o campo é bloqueado', async () => {
+      userRepository.update.mockResolvedValue(buildUser({ name: 'Maria Souza' }));
 
-      await expect(
-        profileService.updateProfile('user-1', { email: 'maria@example.com' }),
-      ).resolves.toBeDefined();
+      await profileService.updateProfile('user-1', {
+        name: 'Maria Souza',
+        ...({ email: 'outro@example.com' } as Record<string, unknown>),
+      });
 
-      expect(userRepository.update).toHaveBeenCalled();
+      expect(userRepository.update).toHaveBeenCalledWith('user-1', {
+        name: 'Maria Souza',
+      });
+      expect(userRepository.findByEmail).not.toHaveBeenCalled();
     });
   });
 

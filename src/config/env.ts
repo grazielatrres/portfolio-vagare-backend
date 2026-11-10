@@ -12,6 +12,7 @@ export const env = {
   gmailAppPassword: process.env.GMAIL_APP_PASSWORD ?? '',
   mailFromName: process.env.MAIL_FROM_NAME ?? 'Vagare',
   resetPasswordUrl: process.env.RESET_PASSWORD_URL ?? 'vagareapp://reset-password',
+  openWeatherApiKey: process.env.OPENWEATHER_API_KEY ?? '',
 };
 
 export function assertServerEnv(): void {
