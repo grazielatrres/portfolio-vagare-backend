@@ -147,6 +147,16 @@ jobs:
             cd "$EC2_APP_DIR"
             docker compose -f docker-compose.prod.yml pull
             docker compose -f docker-compose.prod.yml up -d
+
+            # O Postgres só aplica POSTGRES_PASSWORD na primeira criação do
+            # volume. Se o volume foi criado com outra senha, a API falha ao
+            # autenticar. Este comando alinha a senha do volume com a do
+            # compose a cada deploy (o acesso local no container não pede
+            # senha, e rodar de novo não causa problema).
+            docker compose -f docker-compose.prod.yml exec -T postgres \
+              psql -U postgres -c "ALTER USER postgres WITH PASSWORD 'postgres';"
+            docker compose -f docker-compose.prod.yml restart api
+
             docker image prune -f
 
             # Confere se a API subiu antes de dar o deploy como concluído.
