@@ -79,6 +79,7 @@ Para parar tudo: `docker compose down` (mantém os dados) ou `docker compose dow
 | POST | /auth/register | Cadastro local (nome, e-mail, senha) |
 | POST | /auth/login | Login local (e-mail, senha) |
 | POST | /auth/google | Login com Google (token do Google) |
+| POST | /auth/refresh | Renova o token a partir do refresh token |
 | POST | /auth/logout | Encerra a sessão do token atual |
 | GET | /health | Health check |
 
