@@ -330,6 +330,17 @@ describe('TripService', () => {
       const [, , data] = tripRepository.update.mock.calls[0];
       expect(data).not.toHaveProperty('currency');
     });
+
+    it('ignora moeda inválida no update em vez de rejeitar', async () => {
+      tripRepository.update.mockResolvedValue(buildTrip());
+
+      await expect(
+        tripService.updateTrip('trip-1', 'user-1', { ...validPayload, currency: 'XYZ' }),
+      ).resolves.toBeDefined();
+
+      const [, , data] = tripRepository.update.mock.calls[0];
+      expect(data).not.toHaveProperty('currency');
+    });
   });
 
   describe('deleteTrip', () => {

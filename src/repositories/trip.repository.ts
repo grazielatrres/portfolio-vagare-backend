@@ -13,7 +13,8 @@ export interface CreateTripData {
   numberOfPeople?: number | null;
 }
 
-export type UpdateTripData = Partial<CreateTripData>;
+// `currency` fica de fora de propósito: a moeda da viagem é imutável após a criação.
+export type UpdateTripData = Partial<Omit<CreateTripData, 'currency'>>;
 
 export class TripRepository {
   async create(userId: string, data: CreateTripData): Promise<Trip> {
@@ -66,7 +67,6 @@ export class TripRepository {
         ...(data.startDate !== undefined && { startDate: data.startDate }),
         ...(data.endDate !== undefined && { endDate: data.endDate }),
         ...(data.budget !== undefined && { budget: data.budget }),
-        ...(data.currency !== undefined && { currency: data.currency }),
         ...(data.numberOfPeople !== undefined && { numberOfPeople: data.numberOfPeople }),
       },
     });
