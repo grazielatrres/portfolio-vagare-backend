@@ -1,7 +1,7 @@
 name: CI
 
-# Verifica o código (lint, build, testes e CodeQL). Quando passa num push para a
-# main, dispara o deploy automático (deploy.yml); na develop o deploy é manual.
+# Verifica o código (lint, build, testes e CodeQL). O deploy fica em deploy.yml:
+# automático em todo push na main (com as mesmas verificações), manual na develop.
 on:
   push:
     branches: [main, develop]

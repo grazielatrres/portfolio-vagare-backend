@@ -1,17 +1,20 @@
 name: Deploy
 
 run-name: >-
-  Deploy produção (${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.ref_name }})
-  · ${{ github.event_name == 'workflow_run' && 'automático' || github.actor }}
+  Deploy produção (${{ github.ref_name }})
+  · ${{ github.event_name == 'push' && 'automático' || github.actor }}
 
-# - main: automático. Roda sozinho quando o workflow CI termina com sucesso num
-#   push (inclui merge de PR) para a main — deploy contínuo, sem intervenção.
+# - main: automático. Todo push (inclui merge de PR) na main roda lint, build e
+#   testes e, se passarem, publica — deploy contínuo, sem intervenção.
 # - develop: manual. Aba Actions → Deploy → "Run workflow", escolhendo a branch.
 #   O botão também serve para republicar a main. Outras branches são recusadas.
+#
+# Usa `push` (e não `workflow_run` disparado pelo CI) de propósito: `push` só
+# roda com código que já está no repositório, nunca com código de PR de fork,
+# então os secrets de produção não ficam expostos a código não confiável.
+# Todos os checkouts usam o commit do próprio evento (github.sha).
 on:
-  workflow_run:
-    workflows: [CI]
-    types: [completed]
+  push:
     branches: [main]
   workflow_dispatch:
 
@@ -20,48 +23,27 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Decide qual branch/commit publicar. No automático usa exatamente o commit que
-  # passou no CI (head_sha), não o topo atual da main.
-  resolve:
-    name: Resolver branch e commit
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+  # Bloqueia deploy manual de branches que não sejam main ou develop.
+  guard:
+    name: Validar branch
     runs-on: ubuntu-latest
-    outputs:
-      branch: ${{ steps.ref.outputs.branch }}
-      sha: ${{ steps.ref.outputs.sha }}
     steps:
-      - name: Resolver ref
-        id: ref
+      - name: Validar branch
         env:
-          EVENT_NAME: ${{ github.event_name }}
-          RUN_BRANCH: ${{ github.event.workflow_run.head_branch }}
-          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
-          DISPATCH_BRANCH: ${{ github.ref_name }}
-          DISPATCH_SHA: ${{ github.sha }}
+          BRANCH: ${{ github.ref_name }}
         run: |
-          if [ "$EVENT_NAME" = "workflow_run" ]; then
-            branch="$RUN_BRANCH"; sha="$RUN_SHA"
-          else
-            branch="$DISPATCH_BRANCH"; sha="$DISPATCH_SHA"
-          fi
-          case "$branch" in
-            main|develop) ;;
-            *) echo "::error::Só as branches main e develop podem ser publicadas (recebido: $branch)"; exit 1 ;;
+          case "$BRANCH" in
+            main|develop) echo "Publicando $BRANCH" ;;
+            *) echo "::error::Só as branches main e develop podem ser publicadas (recebido: $BRANCH)"; exit 1 ;;
           esac
-          echo "branch=$branch" >> "$GITHUB_OUTPUT"
-          echo "sha=$sha" >> "$GITHUB_OUTPUT"
 
   checks:
-    name: Lint, Build & Test (${{ needs.resolve.outputs.branch }})
-    needs: resolve
+    name: Lint, Build & Test (${{ github.ref_name }})
+    needs: guard
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.resolve.outputs.sha }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -86,7 +68,7 @@ jobs:
 
   build:
     name: Build da imagem (arm64)
-    needs: [resolve, checks]
+    needs: checks
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -94,8 +76,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.resolve.outputs.sha }}
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -124,14 +104,14 @@ jobs:
           platforms: linux/arm64
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}:${{ needs.resolve.outputs.sha }}
-            ${{ needs.resolve.outputs.branch == 'main' && format('ghcr.io/{0}:latest', github.repository) || '' }}
+            ghcr.io/${{ github.repository }}:${{ github.sha }}
+            ${{ github.ref_name == 'main' && format('ghcr.io/{0}:latest', github.repository) || '' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
   deploy:
     name: Deploy na EC2
-    needs: [resolve, build]
+    needs: build
     runs-on: ubuntu-latest
     # Não configure "Required reviewers" neste ambiente: isso faria o deploy da
     # main esperar aprovação e deixaria de ser automático.
@@ -178,8 +158,6 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.resolve.outputs.sha }}
 
       # O servidor não tem o repositório clonado: só a imagem chega lá via
       # registry. O compose de produção é enviado a cada deploy para a EC2
@@ -239,7 +217,7 @@ jobs:
           GH_ACTOR: ${{ github.actor }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           EC2_APP_DIR: ${{ secrets.EC2_APP_DIR }}
-          IMAGE_TAG: ${{ needs.resolve.outputs.sha }}
+          IMAGE_TAG: ${{ github.sha }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
 
       # Revoga a regra mesmo se o deploy falhar, para a porta 22 nunca
@@ -259,5 +237,5 @@ jobs:
             echo
             echo "| Branch | Disparo | Commit | Imagem |"
             echo "|---|---|---|---|"
-            echo "| ${{ needs.resolve.outputs.branch }} | ${{ github.event_name == 'workflow_run' && 'automático' || 'manual' }} | \`${{ needs.resolve.outputs.sha }}\` | \`ghcr.io/${{ github.repository }}:${{ needs.resolve.outputs.sha }}\` |"
+            echo "| ${{ github.ref_name }} | ${{ github.event_name == 'push' && 'automático' || 'manual' }} | \`${{ github.sha }}\` | \`ghcr.io/${{ github.repository }}:${{ github.sha }}\` |"
           } >> "$GITHUB_STEP_SUMMARY"

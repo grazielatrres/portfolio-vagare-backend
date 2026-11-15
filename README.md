@@ -4,7 +4,7 @@ API do aplicativo Vagare, um app de planejamento de viagens. TCC de Engenharia d
 
 Stack: Node.js, Express, TypeScript, PostgreSQL, Prisma, JWT, Jest.
 
-CI/CD: lint, testes com cobertura mínima de 75% e análise de segurança (CodeQL) rodam em todo push/PR; o deploy é **automático na `main`**: quando o CI passa num push/merge para a `main`, o workflow **Deploy** gera a imagem e publica em produção sem intervenção. Na `develop` o deploy é **manual**: aba Actions → **Deploy** → `Run workflow`, escolhendo a branch `develop` (também dá para republicar a `main` assim). Só `main` e `develop` podem ser publicadas. A senha do Postgres de produção vem do secret `POSTGRES_PASSWORD` do repositório (mín. 20 caracteres, só `A-Z a-z 0-9 _ -`; gere com `openssl rand -hex 32`); sem ele o deploy falha.
+CI/CD: lint, testes com cobertura mínima de 75% e análise de segurança (CodeQL) rodam em todo push/PR; o deploy é **automático na `main`**: a cada push/merge na `main`, o workflow **Deploy** roda lint, build e testes e, se passarem, gera a imagem e publica em produção sem intervenção. Na `develop` o deploy é **manual**: aba Actions → **Deploy** → `Run workflow`, escolhendo a branch `develop` (também dá para republicar a `main` assim). Só `main` e `develop` podem ser publicadas. A senha do Postgres de produção vem do secret `POSTGRES_PASSWORD` do repositório (mín. 20 caracteres, só `A-Z a-z 0-9 _ -`; gere com `openssl rand -hex 32`); sem ele o deploy falha.
 
 ## Pré-requisitos
 
