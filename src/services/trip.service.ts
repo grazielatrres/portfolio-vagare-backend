@@ -21,7 +21,10 @@ export class TripService {
   constructor(private readonly tripRepository: TripRepository = new TripRepository()) {}
 
   async createTrip(userId: string, data: TripPayload): Promise<Trip> {
-    return this.tripRepository.create(userId, this.validateTripPayload(data));
+    return this.tripRepository.create(userId, {
+      ...this.validateTripFields(data),
+      currency: this.parseCurrency(data.currency),
+    });
   }
 
   async listTrips(userId: string): Promise<Trip[]> {
@@ -33,8 +36,11 @@ export class TripService {
   }
 
   async updateTrip(id: string, userId: string, data: TripPayload): Promise<Trip> {
+    // A moeda é definida na criação e não muda depois: orçamento e gastos já
+    // registrados foram lançados nela, e trocá-la distorceria esses valores.
+    // Por isso `currency` é ignorada aqui (nem validada).
     return this.ensureFound(
-      await this.tripRepository.update(id, userId, this.validateTripPayload(data, true)),
+      await this.tripRepository.update(id, userId, this.validateTripFields(data)),
     );
   }
 
@@ -42,7 +48,7 @@ export class TripService {
     return this.ensureFound(await this.tripRepository.delete(id, userId));
   }
 
-  private validateTripPayload(data: TripPayload, isUpdate = false): CreateTripData {
+  private validateTripFields(data: TripPayload): Omit<CreateTripData, 'currency'> {
     if (!this.hasText(data.name)) {
       throw new ValidationError('Nome é obrigatório');
     }
@@ -85,19 +91,6 @@ export class TripService {
       throw new ValidationError('Número de pessoas deve ser pelo menos 1');
     }
 
-    if (isUpdate && data.currency !== undefined && data.budget === undefined) {
-      throw new ValidationError('Informe o orçamento ao alterar a moeda da viagem');
-    }
-
-    const currency = data.currency?.toUpperCase() ?? null;
-
-    if (
-      currency !== null &&
-      !SUPPORTED_CURRENCIES.includes(currency as (typeof SUPPORTED_CURRENCIES)[number])
-    ) {
-      throw new ValidationError('Moeda não suportada');
-    }
-
     return {
       name: data.name.trim(),
       destination: data.destination.trim(),
@@ -106,9 +99,18 @@ export class TripService {
       startDate,
       endDate,
       budget: data.budget ?? null,
-      currency: currency ?? 'BRL',
       numberOfPeople: data.numberOfPeople ?? null,
     };
+  }
+
+  private parseCurrency(value?: string | null): string {
+    const currency = value?.toUpperCase() ?? 'BRL';
+
+    if (!SUPPORTED_CURRENCIES.includes(currency as (typeof SUPPORTED_CURRENCIES)[number])) {
+      throw new ValidationError('Moeda não suportada');
+    }
+
+    return currency;
   }
 
   private ensureFound(trip: Trip | null): Trip {
