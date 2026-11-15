@@ -33,16 +33,17 @@ export class TripService {
   }
 
   async updateTrip(id: string, userId: string, data: TripPayload): Promise<Trip> {
-    return this.ensureFound(
-      await this.tripRepository.update(id, userId, this.validateTripPayload(data, true)),
-    );
+    // A moeda é definida na criação e não muda depois: orçamento e gastos já
+    // registrados foram lançados nela, e trocá-la distorceria esses valores.
+    const { currency: _currency, ...payload } = this.validateTripPayload(data);
+    return this.ensureFound(await this.tripRepository.update(id, userId, payload));
   }
 
   async deleteTrip(id: string, userId: string): Promise<Trip> {
     return this.ensureFound(await this.tripRepository.delete(id, userId));
   }
 
-  private validateTripPayload(data: TripPayload, isUpdate = false): CreateTripData {
+  private validateTripPayload(data: TripPayload): CreateTripData {
     if (!this.hasText(data.name)) {
       throw new ValidationError('Nome é obrigatório');
     }
@@ -83,10 +84,6 @@ export class TripService {
       (!Number.isInteger(data.numberOfPeople) || data.numberOfPeople < 1)
     ) {
       throw new ValidationError('Número de pessoas deve ser pelo menos 1');
-    }
-
-    if (isUpdate && data.currency !== undefined && data.budget === undefined) {
-      throw new ValidationError('Informe o orçamento ao alterar a moeda da viagem');
     }
 
     const currency = data.currency?.toUpperCase() ?? null;

@@ -5,7 +5,9 @@ import { NotFoundError, ValidationError } from '../types/errors';
 
 const TRIP_NOT_FOUND = 'Viagem não encontrada';
 const INFO_NOT_FOUND = 'Informação não encontrada';
-const SUPPORTED_TYPES: InfoType[] = ['flight', 'lodging', 'document'];
+// 'document' continua no enum do banco, mas não é mais aceito: armazenar dados
+// de documentos pessoais (passaporte, RG etc.) traz obrigações extras de LGPD.
+const SUPPORTED_TYPES: InfoType[] = ['flight', 'lodging'];
 
 export interface InfoPayload {
   type: InfoType;

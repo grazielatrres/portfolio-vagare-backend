@@ -312,14 +312,23 @@ describe('TripService', () => {
       );
     });
 
-    it('lança ValidationError ao mudar a moeda sem reenviar o orçamento', async () => {
-      const { budget: _budget, ...payloadWithoutBudget } = validPayload;
+    it('não altera a moeda da viagem, mesmo quando ela é enviada', async () => {
+      tripRepository.update.mockResolvedValue(buildTrip());
 
-      await expect(
-        tripService.updateTrip('trip-1', 'user-1', { ...payloadWithoutBudget, currency: 'USD' }),
-      ).rejects.toBeInstanceOf(ValidationError);
+      await tripService.updateTrip('trip-1', 'user-1', { ...validPayload, currency: 'USD' });
 
-      expect(tripRepository.update).not.toHaveBeenCalled();
+      const [, , data] = tripRepository.update.mock.calls[0];
+      expect(data).not.toHaveProperty('currency');
+    });
+
+    it('não volta a moeda para BRL quando ela é omitida', async () => {
+      tripRepository.update.mockResolvedValue(buildTrip());
+      const { currency: _currency, ...payloadWithoutCurrency } = validPayload;
+
+      await tripService.updateTrip('trip-1', 'user-1', payloadWithoutCurrency);
+
+      const [, , data] = tripRepository.update.mock.calls[0];
+      expect(data).not.toHaveProperty('currency');
     });
   });
 
