@@ -6,6 +6,7 @@ import request from 'supertest';
 import { createApp } from '../src/app';
 import { env } from '../src/config/env';
 import { prisma } from '../src/config/prisma';
+import { LOGIN_RATE_LIMIT_MAX_FAILURES } from '../src/middlewares/rateLimit.middleware';
 import { AuthService } from '../src/services/auth/auth.service';
 
 jest.mock('../src/config/prisma', () => ({
@@ -18,6 +19,7 @@ jest.mock('../src/config/prisma', () => ({
     session: {
       create: jest.fn(),
       findUnique: jest.fn(),
+      updateMany: jest.fn(),
       deleteMany: jest.fn(),
     },
     trip: {
@@ -39,6 +41,7 @@ const prismaUser = prisma.user as unknown as {
 const prismaSession = prisma.session as unknown as {
   create: jest.Mock;
   findUnique: jest.Mock;
+  updateMany: jest.Mock;
   deleteMany: jest.Mock;
 };
 
@@ -75,7 +78,7 @@ describe('Auth endpoints (integração)', () => {
       const response = await request(app).post('/auth/register').send({
         name: 'Maria Silva',
         email: 'maria@example.com',
-        password: 'senha123',
+        password: 'Senha@123',
       });
 
       expect(response.status).toBe(201);
@@ -102,7 +105,7 @@ describe('Auth endpoints (integração)', () => {
       const response = await request(app).post('/auth/register').send({
         name: 'Maria Silva',
         email: 'maria@example.com',
-        password: 'senha123',
+        password: 'Senha@123',
       });
 
       expect(response.status).toBe(409);
@@ -122,6 +125,7 @@ describe('Auth endpoints (integração)', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.token).toEqual(expect.any(String));
+      expect(response.body.refreshToken).toEqual(expect.any(String));
       expect(response.body.user.email).toBe('maria@example.com');
     });
 
@@ -144,6 +148,53 @@ describe('Auth endpoints (integração)', () => {
 
       expect(response.status).toBe(401);
       expect(response.body).toEqual({ error: 'Credenciais inválidas' });
+    });
+
+    it(`retorna 429 após ${LOGIN_RATE_LIMIT_MAX_FAILURES} tentativas falhas para o mesmo e-mail`, async () => {
+      prismaUser.findUnique.mockResolvedValue(null);
+      const credentials = { email: 'rate-limit@example.com', password: 'senha-errada' };
+
+      for (let attempt = 0; attempt < LOGIN_RATE_LIMIT_MAX_FAILURES; attempt++) {
+        const response = await request(app).post('/auth/login').send(credentials);
+        expect(response.status).toBe(401);
+      }
+
+      const blocked = await request(app).post('/auth/login').send(credentials);
+      expect(blocked.status).toBe(429);
+      expect(blocked.body).toEqual({
+        error: 'Muitas tentativas de login. Tente novamente em alguns minutos.',
+      });
+
+      // A chave inclui o e-mail: outro usuário no mesmo IP continua liberado.
+      const otherUser = await request(app)
+        .post('/auth/login')
+        .send({ email: 'outro@example.com', password: 'senha-errada' });
+      expect(otherUser.status).toBe(401);
+    });
+
+    it('usa o IP real do cliente (X-Forwarded-For do nginx) no rate limit', async () => {
+      prismaUser.findUnique.mockResolvedValue(null);
+      const credentials = { email: 'proxy@example.com', password: 'senha-errada' };
+
+      for (let attempt = 0; attempt < LOGIN_RATE_LIMIT_MAX_FAILURES; attempt++) {
+        await request(app)
+          .post('/auth/login')
+          .set('X-Forwarded-For', '203.0.113.10')
+          .send(credentials);
+      }
+
+      const blocked = await request(app)
+        .post('/auth/login')
+        .set('X-Forwarded-For', '203.0.113.10')
+        .send(credentials);
+      expect(blocked.status).toBe(429);
+
+      // Mesmo e-mail vindo de outro cliente atrás do mesmo nginx: não é bloqueado.
+      const otherClient = await request(app)
+        .post('/auth/login')
+        .set('X-Forwarded-For', '203.0.113.20')
+        .send(credentials);
+      expect(otherClient.status).toBe(401);
     });
   });
 
@@ -213,7 +264,7 @@ describe('Auth endpoints (integração)', () => {
 
       const response = await request(app)
         .post('/auth/reset-password')
-        .send({ token: 'token-valido', password: 'novaSenha123' });
+        .send({ token: 'token-valido', password: 'NovaSenha@123' });
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({ message: 'Senha redefinida com sucesso.' });
@@ -225,7 +276,7 @@ describe('Auth endpoints (integração)', () => {
 
       const response = await request(app)
         .post('/auth/reset-password')
-        .send({ token: 'token-invalido', password: 'novaSenha123' });
+        .send({ token: 'token-invalido', password: 'NovaSenha@123' });
 
       expect(response.status).toBe(400);
       expect(response.body).toEqual({ error: 'Token inválido ou expirado' });
@@ -287,6 +338,46 @@ describe('Auth endpoints (integração)', () => {
 
       expect(response.status).toBe(401);
       expect(response.body).toEqual({ error: 'Sessão encerrada. Faça login novamente.' });
+    });
+  });
+
+  describe('POST /auth/refresh', () => {
+    it('troca um refresh token válido por um novo par e retorna 200', async () => {
+      prismaSession.findUnique.mockResolvedValue({
+        id: 'session-1',
+        userId: 'user-1',
+        expiresAt: new Date(Date.now() + 60_000),
+      });
+      prismaUser.findUnique.mockResolvedValue(buildUser());
+      prismaSession.updateMany.mockResolvedValue({ count: 1 });
+
+      const response = await request(app)
+        .post('/auth/refresh')
+        .send({ refreshToken: 'refresh-atual' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.token).toEqual(expect.any(String));
+      expect(response.body.refreshToken).toEqual(expect.any(String));
+      expect(response.body.refreshToken).not.toBe('refresh-atual');
+      expect(response.body.user.id).toBe('user-1');
+      expect(authService.verifyToken(response.body.token).sid).toBe('session-1');
+    });
+
+    it('retorna 400 quando o refresh token está ausente', async () => {
+      const response = await request(app).post('/auth/refresh').send({});
+
+      expect(response.status).toBe(400);
+      expect(response.body).toEqual({ error: 'Refresh token é obrigatório' });
+    });
+
+    it('retorna 401 quando o refresh token não corresponde a nenhuma sessão', async () => {
+      prismaSession.findUnique.mockResolvedValue(null);
+
+      const response = await request(app)
+        .post('/auth/refresh')
+        .send({ refreshToken: 'desconhecido' });
+
+      expect(response.status).toBe(401);
     });
   });
 

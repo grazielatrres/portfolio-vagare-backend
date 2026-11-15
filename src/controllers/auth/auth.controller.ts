@@ -57,6 +57,21 @@ export class AuthController {
     }
   }
 
+  async refresh(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { refreshToken } = req.body as { refreshToken?: string };
+
+      if (!refreshToken) {
+        throw new AppError('Refresh token é obrigatório', 400);
+      }
+
+      const result = await authService.refresh(refreshToken);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async logout(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       if (!req.sessionId) {

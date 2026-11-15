@@ -42,6 +42,43 @@ describe('cobertura complementar', () => {
 
       expect(() => assertServerEnv()).toThrow(/Variáveis de ambiente obrigatórias ausentes/);
     });
+
+    it.each(['abc', '0', '-5', '1.5'])('lança quando REFRESH_TOKEN_TTL_DAYS é "%s"', (value) => {
+      process.env = {
+        ...originalEnv,
+        DATABASE_URL: 'postgresql://localhost:5432/vagare',
+        JWT_SECRET: 'secret',
+        REFRESH_TOKEN_TTL_DAYS: value,
+      };
+
+      expect(() => assertServerEnv()).toThrow(/REFRESH_TOKEN_TTL_DAYS inválido/);
+    });
+
+    it.each([undefined, ''])('aceita REFRESH_TOKEN_TTL_DAYS ausente ou vazio (%p)', (value) => {
+      process.env = {
+        ...originalEnv,
+        DATABASE_URL: 'postgresql://localhost:5432/vagare',
+        JWT_SECRET: 'secret',
+      };
+      if (value === undefined) {
+        delete process.env.REFRESH_TOKEN_TTL_DAYS;
+      } else {
+        process.env.REFRESH_TOKEN_TTL_DAYS = value;
+      }
+
+      expect(() => assertServerEnv()).not.toThrow();
+    });
+
+    it('aceita REFRESH_TOKEN_TTL_DAYS inteiro positivo', () => {
+      process.env = {
+        ...originalEnv,
+        DATABASE_URL: 'postgresql://localhost:5432/vagare',
+        JWT_SECRET: 'secret',
+        REFRESH_TOKEN_TTL_DAYS: '30',
+      };
+
+      expect(() => assertServerEnv()).not.toThrow();
+    });
   });
 
   describe('AppError', () => {
