@@ -98,4 +98,22 @@ describe('SessionRepository', () => {
       expect(prismaSession.deleteMany).toHaveBeenCalledWith({ where: { id: 'session-1' } });
     });
   });
+
+  describe('deleteExpiredByUserId', () => {
+    it('remove só as sessões do usuário já expiradas ou sem expiração', async () => {
+      prismaSession.deleteMany.mockResolvedValue({ count: 2 });
+      const before = Date.now();
+
+      await repository.deleteExpiredByUserId('user-1');
+
+      expect(prismaSession.deleteMany).toHaveBeenCalledWith({
+        where: {
+          userId: 'user-1',
+          OR: [{ expiresAt: { lte: expect.any(Date) } }, { expiresAt: null }],
+        },
+      });
+      const [{ where }] = prismaSession.deleteMany.mock.calls[0];
+      expect(where.OR[0].expiresAt.lte.getTime()).toBeGreaterThanOrEqual(before);
+    });
+  });
 });

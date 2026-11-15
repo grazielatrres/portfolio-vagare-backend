@@ -6,6 +6,7 @@ import request from 'supertest';
 import { createApp } from '../src/app';
 import { env } from '../src/config/env';
 import { prisma } from '../src/config/prisma';
+import { LOGIN_RATE_LIMIT_MAX_FAILURES } from '../src/middlewares/rateLimit.middleware';
 import { AuthService } from '../src/services/auth/auth.service';
 
 jest.mock('../src/config/prisma', () => ({
@@ -147,6 +148,53 @@ describe('Auth endpoints (integração)', () => {
 
       expect(response.status).toBe(401);
       expect(response.body).toEqual({ error: 'Credenciais inválidas' });
+    });
+
+    it(`retorna 429 após ${LOGIN_RATE_LIMIT_MAX_FAILURES} tentativas falhas para o mesmo e-mail`, async () => {
+      prismaUser.findUnique.mockResolvedValue(null);
+      const credentials = { email: 'rate-limit@example.com', password: 'senha-errada' };
+
+      for (let attempt = 0; attempt < LOGIN_RATE_LIMIT_MAX_FAILURES; attempt++) {
+        const response = await request(app).post('/auth/login').send(credentials);
+        expect(response.status).toBe(401);
+      }
+
+      const blocked = await request(app).post('/auth/login').send(credentials);
+      expect(blocked.status).toBe(429);
+      expect(blocked.body).toEqual({
+        error: 'Muitas tentativas de login. Tente novamente em alguns minutos.',
+      });
+
+      // A chave inclui o e-mail: outro usuário no mesmo IP continua liberado.
+      const otherUser = await request(app)
+        .post('/auth/login')
+        .send({ email: 'outro@example.com', password: 'senha-errada' });
+      expect(otherUser.status).toBe(401);
+    });
+
+    it('usa o IP real do cliente (X-Forwarded-For do nginx) no rate limit', async () => {
+      prismaUser.findUnique.mockResolvedValue(null);
+      const credentials = { email: 'proxy@example.com', password: 'senha-errada' };
+
+      for (let attempt = 0; attempt < LOGIN_RATE_LIMIT_MAX_FAILURES; attempt++) {
+        await request(app)
+          .post('/auth/login')
+          .set('X-Forwarded-For', '203.0.113.10')
+          .send(credentials);
+      }
+
+      const blocked = await request(app)
+        .post('/auth/login')
+        .set('X-Forwarded-For', '203.0.113.10')
+        .send(credentials);
+      expect(blocked.status).toBe(429);
+
+      // Mesmo e-mail vindo de outro cliente atrás do mesmo nginx: não é bloqueado.
+      const otherClient = await request(app)
+        .post('/auth/login')
+        .set('X-Forwarded-For', '203.0.113.20')
+        .send(credentials);
+      expect(otherClient.status).toBe(401);
     });
   });
 

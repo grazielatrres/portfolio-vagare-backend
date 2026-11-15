@@ -287,6 +287,10 @@ export class AuthService {
   }
 
   private async buildAuthResponse(user: User): Promise<AuthResponse> {
+    // Sessões abandonadas (app desinstalado etc.) nunca passam pelo /refresh,
+    // então aproveitamos cada novo login para limpar as expiradas do usuário.
+    await this.sessionRepository.deleteExpiredByUserId(user.id);
+
     const refreshToken = this.generateRefreshToken();
     const session = await this.sessionRepository.create(
       user.id,

@@ -63,6 +63,7 @@ describe('AuthService', () => {
       rotateRefreshToken: jest.fn(),
       deleteById: jest.fn(),
       deleteAllByUserId: jest.fn(),
+      deleteExpiredByUserId: jest.fn(),
     } as unknown as jest.Mocked<SessionRepository>;
 
     mailService = {
@@ -255,6 +256,27 @@ describe('AuthService', () => {
       expect(refreshTokenHash).toHaveLength(64);
       expect(refreshTokenHash).not.toBe(result.refreshToken);
       expect(expiresAt.getTime()).toBeGreaterThan(Date.now() + 59 * 24 * 60 * 60 * 1000);
+    });
+
+    it('remove as sessões expiradas do usuário antes de criar a nova', async () => {
+      const passwordHash = await authService.hashPassword('senha123');
+      userRepository.findByEmail.mockResolvedValue(buildUser({ passwordHash }));
+
+      await authService.login('maria@example.com', 'senha123');
+
+      expect(sessionRepository.deleteExpiredByUserId).toHaveBeenCalledWith('user-1');
+      expect(sessionRepository.deleteExpiredByUserId.mock.invocationCallOrder[0]).toBeLessThan(
+        sessionRepository.create.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('não limpa sessões quando as credenciais são inválidas', async () => {
+      userRepository.findByEmail.mockResolvedValue(null);
+
+      await expect(authService.login('naoexiste@example.com', 'senha123')).rejects.toMatchObject({
+        statusCode: 401,
+      });
+      expect(sessionRepository.deleteExpiredByUserId).not.toHaveBeenCalled();
     });
 
     it('retorna 401 genérico para e-mail inexistente', async () => {

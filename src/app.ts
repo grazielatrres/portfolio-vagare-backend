@@ -13,6 +13,12 @@ import { errorMiddleware } from './middlewares/error.middleware';
 export function createApp() {
   const app = express();
 
+  // Em produção a API fica atrás do nginx (TLS), que repassa o IP do cliente em
+  // X-Forwarded-For. Confiar em exatamente 1 salto faz req.ip ser o IP real, sem o
+  // qual os rate limiters contariam todos os usuários como um só (o IP do nginx).
+  // É seguro porque a porta da API só escuta em 127.0.0.1 (docker-compose.prod.yml).
+  app.set('trust proxy', 1);
+
   app.use(cors());
   app.use(express.json());
 

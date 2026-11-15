@@ -46,6 +46,19 @@ export class SessionRepository {
     await prisma.session.deleteMany({ where: { id } });
   }
 
+  /**
+   * Remove as sessões do usuário que já expiraram e as antigas sem expiração
+   * (criadas antes do refresh token, que não podem mais ser renovadas).
+   */
+  async deleteExpiredByUserId(userId: string): Promise<void> {
+    await prisma.session.deleteMany({
+      where: {
+        userId,
+        OR: [{ expiresAt: { lte: new Date() } }, { expiresAt: null }],
+      },
+    });
+  }
+
   async deleteAllByUserId(userId: string): Promise<void> {
     await prisma.session.deleteMany({ where: { userId } });
   }
