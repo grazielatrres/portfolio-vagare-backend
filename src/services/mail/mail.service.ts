@@ -1,5 +1,6 @@
 import nodemailer, { Transporter } from 'nodemailer';
 import { env } from '../../config/env';
+import { log } from '../../config/observability';
 
 export interface PasswordResetEmail {
   to: string;
@@ -20,7 +21,7 @@ export class MailService {
     `;
 
     if (!env.gmailUser || !env.gmailAppPassword) {
-      console.log(`[mail:dev] Reset de senha para ${to}: ${resetLink}`);
+      log('warn', 'mail_not_configured', { kind: 'password_reset' });
       return;
     }
 

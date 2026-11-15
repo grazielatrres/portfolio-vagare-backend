@@ -10,6 +10,7 @@ import { infoRoutes } from './routes/info.routes';
 import { profileRoutes } from './routes/profile.routes';
 import { errorMiddleware } from './middlewares/error.middleware';
 import { requestLogger } from './middlewares/requestLogger.middleware';
+import { apiRateLimiter } from './middlewares/rateLimit.middleware';
 import { captureError } from './config/observability';
 import { prisma } from './config/prisma';
 
@@ -42,6 +43,8 @@ export function createApp() {
       res.status(503).json({ status: 'error', database: 'down' });
     }
   });
+
+  app.use(apiRateLimiter);
 
   app.use('/auth', authRoutes);
   app.use('/trips', tripRoutes);
