@@ -33,6 +33,14 @@ services:
       - .env
     environment:
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD}@postgres:5432/vagare?schema=public
+      # Versão reportada ao Sentry: o SHA do commit publicado.
+      SENTRY_RELEASE: ${IMAGE_TAG:-latest}
+    # Rotação dos logs JSON do container (o disco da t4g.micro é pequeno).
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '5'
     depends_on:
       postgres:
         condition: service_healthy

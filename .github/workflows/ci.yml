@@ -16,9 +16,14 @@ jobs:
   test:
     name: Lint & Test
     runs-on: ubuntu-latest
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Histórico completo: o SonarCloud usa o blame para atribuir issues novas.
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -40,6 +45,12 @@ jobs:
 
       - name: Test with coverage (fails below 75%)
         run: npm run test:coverage
+
+      # Análise estática no SonarQube Cloud, com a cobertura gerada acima.
+      # Fica desligada até o secret SONAR_TOKEN existir (PRs de fork também não o recebem).
+      - name: SonarCloud scan
+        if: env.SONAR_TOKEN != ''
+        uses: SonarSource/sonarqube-scan-action@v8
 
   security:
     name: CodeQL Analysis
