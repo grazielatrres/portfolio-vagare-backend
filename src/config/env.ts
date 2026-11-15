@@ -6,7 +6,10 @@ export const env = {
   nodeEnv: process.env.NODE_ENV ?? 'development',
   port: Number(process.env.PORT ?? 3000),
   jwtSecret: process.env.JWT_SECRET ?? '',
-  jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? '24h',
+  jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? '1h',
+  // `||` (e não `??`) para que REFRESH_TOKEN_TTL_DAYS= vazio também caia no padrão,
+  // em vez de virar Number('') === 0 e criar sessões já expiradas.
+  refreshTokenTtlDays: Number(process.env.REFRESH_TOKEN_TTL_DAYS || 60),
   googleClientId: process.env.GOOGLE_CLIENT_ID ?? '',
   gmailUser: process.env.GMAIL_USER ?? '',
   gmailAppPassword: process.env.GMAIL_APP_PASSWORD ?? '',
@@ -21,5 +24,15 @@ export function assertServerEnv(): void {
 
   if (missing.length > 0) {
     throw new Error(`Variáveis de ambiente obrigatórias ausentes: ${missing.join(', ')}`);
+  }
+
+  const refreshTokenTtl = process.env.REFRESH_TOKEN_TTL_DAYS;
+  if (refreshTokenTtl) {
+    const days = Number(refreshTokenTtl);
+    if (!Number.isInteger(days) || days <= 0) {
+      throw new Error(
+        `REFRESH_TOKEN_TTL_DAYS inválido: "${refreshTokenTtl}". Use um número inteiro de dias maior que zero.`,
+      );
+    }
   }
 }

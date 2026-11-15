@@ -94,22 +94,17 @@ describe('InfoService', () => {
       );
     });
 
-    it('cria informação de documento (RF23)', async () => {
+    it('rejeita informação de documento (removida por LGPD)', async () => {
       tripRepository.findByIdAndUser.mockResolvedValue(trip);
-      infoRepository.create.mockResolvedValue(buildInfo({ type: 'document' }));
 
-      await infoService.createInfo('trip-1', 'user-1', {
-        type: 'document',
-        title: 'Passaporte',
-        date: '2030-01-01',
-        description: 'Levar cópia física',
-        details: { number: 'FX123456' },
-      });
-
-      expect(infoRepository.create).toHaveBeenCalledWith(
-        'trip-1',
-        expect.objectContaining({ type: 'document', description: 'Levar cópia física' }),
-      );
+      await expect(
+        infoService.createInfo('trip-1', 'user-1', {
+          type: 'document',
+          title: 'Passaporte',
+          details: { number: 'FX123456' },
+        }),
+      ).rejects.toBeInstanceOf(ValidationError);
+      expect(infoRepository.create).not.toHaveBeenCalled();
     });
 
     it('aceita cadastro incremental apenas com título (fluxo alternativo UC05)', async () => {

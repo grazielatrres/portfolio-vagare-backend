@@ -9,15 +9,18 @@ import { SessionRepository } from '../../repositories/auth/session.repository';
 import { MailService } from '../mail/mail.service';
 import { AppError } from '../../types/errors';
 import { AuthenticatedUser, AuthResponse, JwtPayload } from '../../types/express';
+import { getPasswordPolicyError } from './passwordPolicy';
 
 const BCRYPT_ROUNDS = 10;
-const MIN_PASSWORD_LENGTH = 6;
 const RESET_TOKEN_BYTES = 32;
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
+const REFRESH_TOKEN_BYTES = 32;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 export interface AuthServiceConfig {
   jwtSecret: string;
   jwtExpiresIn: string;
+  refreshTokenTtlDays: number;
   googleClientId: string;
   resetPasswordUrl: string;
 }
@@ -31,6 +34,7 @@ export class AuthService {
     private readonly config: AuthServiceConfig = {
       jwtSecret: env.jwtSecret,
       jwtExpiresIn: env.jwtExpiresIn,
+      refreshTokenTtlDays: env.refreshTokenTtlDays,
       googleClientId: env.googleClientId,
       resetPasswordUrl: env.resetPasswordUrl,
     },
@@ -148,13 +152,52 @@ export class AuthService {
       return decoded;
     } catch (error) {
       if (error instanceof TokenExpiredError) {
-        throw new AppError('Token expirado. Faça login novamente.', 401);
+        throw new AppError('Token expirado', 401);
       }
       if (error instanceof JsonWebTokenError) {
         throw new AppError('Token inválido', 401);
       }
       throw error;
     }
+  }
+
+  async refresh(refreshToken: string): Promise<AuthResponse> {
+    if (!refreshToken?.trim()) {
+      throw new AppError('Refresh token é obrigatório', 400);
+    }
+
+    const currentHash = this.hashOpaqueToken(refreshToken);
+    const session = await this.sessionRepository.findByRefreshTokenHash(currentHash);
+    if (!session) {
+      throw new AppError('Sessão encerrada. Faça login novamente.', 401);
+    }
+
+    if (!session.expiresAt || session.expiresAt.getTime() <= Date.now()) {
+      await this.sessionRepository.deleteById(session.id);
+      throw new AppError('Sessão expirada. Faça login novamente.', 401);
+    }
+
+    const user = await this.userRepository.findById(session.userId);
+    if (!user) {
+      throw new AppError('Usuário não encontrado', 401);
+    }
+
+    const nextRefreshToken = this.generateRefreshToken();
+    const rotated = await this.sessionRepository.rotateRefreshToken(
+      session.id,
+      currentHash,
+      this.hashOpaqueToken(nextRefreshToken),
+      this.refreshTokenExpiresAt(),
+    );
+    if (!rotated) {
+      throw new AppError('Sessão encerrada. Faça login novamente.', 401);
+    }
+
+    return {
+      token: this.generateToken(user, session.id),
+      refreshToken: nextRefreshToken,
+      user: this.toPublicUser(user),
+    };
   }
 
   async logout(sessionId: string): Promise<void> {
@@ -173,7 +216,7 @@ export class AuthService {
 
     const rawToken = crypto.randomBytes(RESET_TOKEN_BYTES).toString('hex');
     const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MS);
-    await this.userRepository.setResetToken(user.id, this.hashResetToken(rawToken), expiresAt);
+    await this.userRepository.setResetToken(user.id, this.hashOpaqueToken(rawToken), expiresAt);
 
     const resetLink = `${this.config.resetPasswordUrl}?token=${rawToken}`;
     await this.mailService.sendPasswordResetEmail({
@@ -187,11 +230,12 @@ export class AuthService {
     if (!token?.trim()) {
       throw new AppError('Token é obrigatório', 400);
     }
-    if (!newPassword || newPassword.length < MIN_PASSWORD_LENGTH) {
-      throw new AppError('A senha deve ter no mínimo 6 caracteres', 400);
+    if (!newPassword) {
+      throw new AppError('Senha é obrigatória', 400);
     }
+    this.assertStrongPassword(newPassword);
 
-    const user = await this.userRepository.findByResetTokenHash(this.hashResetToken(token));
+    const user = await this.userRepository.findByResetTokenHash(this.hashOpaqueToken(token));
     if (!user) {
       throw new AppError('Token inválido ou expirado', 400);
     }
@@ -201,8 +245,25 @@ export class AuthService {
     await this.sessionRepository.deleteAllByUserId(user.id);
   }
 
-  private hashResetToken(token: string): string {
+  private hashOpaqueToken(token: string): string {
     return crypto.createHash('sha256').update(token).digest('hex');
+  }
+
+  private generateRefreshToken(): string {
+    return crypto.randomBytes(REFRESH_TOKEN_BYTES).toString('hex');
+  }
+
+  private refreshTokenExpiresAt(): Date {
+    return new Date(Date.now() + this.config.refreshTokenTtlDays * DAY_MS);
+  }
+
+  private toPublicUser(user: User): AuthenticatedUser {
+    return {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      provider: user.provider,
+    };
   }
 
   private validateCredentialsInput(name: string, email: string, password: string): void {
@@ -215,24 +276,32 @@ export class AuthService {
     if (!password) {
       throw new AppError('Senha é obrigatória', 400);
     }
-    if (password.length < MIN_PASSWORD_LENGTH) {
-      throw new AppError('A senha deve ter no mínimo 6 caracteres', 400);
+    this.assertStrongPassword(password);
+  }
+
+  private assertStrongPassword(password: string): void {
+    const policyError = getPasswordPolicyError(password);
+    if (policyError) {
+      throw new AppError(policyError, 400);
     }
   }
 
   private async buildAuthResponse(user: User): Promise<AuthResponse> {
-    const session = await this.sessionRepository.create(user.id);
+    // Sessões abandonadas (app desinstalado etc.) nunca passam pelo /refresh,
+    // então aproveitamos cada novo login para limpar as expiradas do usuário.
+    await this.sessionRepository.deleteExpiredByUserId(user.id);
 
-    const publicUser: AuthenticatedUser = {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      provider: user.provider,
-    };
+    const refreshToken = this.generateRefreshToken();
+    const session = await this.sessionRepository.create(
+      user.id,
+      this.hashOpaqueToken(refreshToken),
+      this.refreshTokenExpiresAt(),
+    );
 
     return {
       token: this.generateToken(user, session.id),
-      user: publicUser,
+      refreshToken,
+      user: this.toPublicUser(user),
     };
   }
 }

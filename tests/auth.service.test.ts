@@ -34,6 +34,7 @@ describe('AuthService', () => {
   const config = {
     jwtSecret: 'test-secret',
     jwtExpiresIn: '1h',
+    refreshTokenTtlDays: 60,
     googleClientId: 'google-client-id',
     resetPasswordUrl: 'vagareapp://reset-password',
   };
@@ -58,8 +59,11 @@ describe('AuthService', () => {
     sessionRepository = {
       create: jest.fn().mockResolvedValue({ id: 'session-1' }),
       existsById: jest.fn(),
+      findByRefreshTokenHash: jest.fn(),
+      rotateRefreshToken: jest.fn(),
       deleteById: jest.fn(),
       deleteAllByUserId: jest.fn(),
+      deleteExpiredByUserId: jest.fn(),
     } as unknown as jest.Mocked<SessionRepository>;
 
     mailService = {
@@ -175,7 +179,7 @@ describe('AuthService', () => {
         }),
       );
 
-      const result = await authService.register('Maria Silva', 'maria@example.com', 'senha123');
+      const result = await authService.register('Maria Silva', 'maria@example.com', 'Senha@123');
 
       expect(userRepository.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -187,18 +191,32 @@ describe('AuthService', () => {
 
       const createArg = userRepository.create.mock.calls[0][0];
       expect(createArg.passwordHash).toBeDefined();
-      expect(createArg.passwordHash).not.toBe('senha123');
+      expect(createArg.passwordHash).not.toBe('Senha@123');
       expect(result.token).toBeDefined();
       expect(result.user.email).toBe('maria@example.com');
     });
 
-    it('retorna 400 quando a senha tem menos de 6 caracteres', async () => {
+    it('retorna 400 quando a senha tem menos de 8 caracteres', async () => {
       await expect(
-        authService.register('Maria', 'maria@example.com', '12345'),
+        authService.register('Maria', 'maria@example.com', 'Ab@1'),
       ).rejects.toMatchObject({
         statusCode: 400,
-        message: 'A senha deve ter no mínimo 6 caracteres',
+        message: 'A senha deve ter no mínimo 8 caracteres',
       });
+
+      expect(userRepository.create).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['SENHA@123', 'A senha deve conter pelo menos uma letra minúscula'],
+      ['senha@123', 'A senha deve conter pelo menos uma letra maiúscula'],
+      ['Senha@abc', 'A senha deve conter pelo menos um número'],
+      ['Senha1234', 'A senha deve conter pelo menos um caractere especial'],
+      ['Senha @123', 'A senha não pode conter espaços'],
+    ])('retorna 400 para senha fraca "%s"', async (password, message) => {
+      await expect(
+        authService.register('Maria', 'maria@example.com', password),
+      ).rejects.toMatchObject({ statusCode: 400, message });
 
       expect(userRepository.create).not.toHaveBeenCalled();
     });
@@ -207,7 +225,7 @@ describe('AuthService', () => {
       userRepository.findByEmail.mockResolvedValue(buildUser());
 
       await expect(
-        authService.register('Outra', 'maria@example.com', 'senha123'),
+        authService.register('Outra', 'maria@example.com', 'Senha@123'),
       ).rejects.toMatchObject({
         statusCode: 409,
         message: 'E-mail já cadastrado',
@@ -224,6 +242,41 @@ describe('AuthService', () => {
 
       expect(result.token).toBeDefined();
       expect(result.user.id).toBe('user-1');
+    });
+
+    it('cria a sessão com o hash do refresh token (nunca o token puro) e expiração futura', async () => {
+      const passwordHash = await authService.hashPassword('senha123');
+      userRepository.findByEmail.mockResolvedValue(buildUser({ passwordHash }));
+
+      const result = await authService.login('maria@example.com', 'senha123');
+
+      expect(result.refreshToken).toMatch(/^[0-9a-f]{64}$/);
+      const [userId, refreshTokenHash, expiresAt] = sessionRepository.create.mock.calls[0];
+      expect(userId).toBe('user-1');
+      expect(refreshTokenHash).toHaveLength(64);
+      expect(refreshTokenHash).not.toBe(result.refreshToken);
+      expect(expiresAt.getTime()).toBeGreaterThan(Date.now() + 59 * 24 * 60 * 60 * 1000);
+    });
+
+    it('remove as sessões expiradas do usuário antes de criar a nova', async () => {
+      const passwordHash = await authService.hashPassword('senha123');
+      userRepository.findByEmail.mockResolvedValue(buildUser({ passwordHash }));
+
+      await authService.login('maria@example.com', 'senha123');
+
+      expect(sessionRepository.deleteExpiredByUserId).toHaveBeenCalledWith('user-1');
+      expect(sessionRepository.deleteExpiredByUserId.mock.invocationCallOrder[0]).toBeLessThan(
+        sessionRepository.create.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('não limpa sessões quando as credenciais são inválidas', async () => {
+      userRepository.findByEmail.mockResolvedValue(null);
+
+      await expect(authService.login('naoexiste@example.com', 'senha123')).rejects.toMatchObject({
+        statusCode: 401,
+      });
+      expect(sessionRepository.deleteExpiredByUserId).not.toHaveBeenCalled();
     });
 
     it('retorna 401 genérico para e-mail inexistente', async () => {
@@ -318,6 +371,92 @@ describe('AuthService', () => {
     });
   });
 
+  describe('refresh', () => {
+    const validSession = () => ({
+      id: 'session-1',
+      userId: 'user-1',
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+
+    it('rotaciona o refresh token, renova a expiração e retorna novo par de tokens', async () => {
+      sessionRepository.findByRefreshTokenHash.mockResolvedValue(validSession());
+      userRepository.findById.mockResolvedValue(buildUser());
+      sessionRepository.rotateRefreshToken.mockResolvedValue(true);
+
+      const result = await authService.refresh('refresh-atual');
+
+      const [lookupHash] = sessionRepository.findByRefreshTokenHash.mock.calls[0];
+      const [sessionId, currentHash, nextHash, expiresAt] =
+        sessionRepository.rotateRefreshToken.mock.calls[0];
+      expect(sessionId).toBe('session-1');
+      expect(currentHash).toBe(lookupHash);
+      expect(nextHash).not.toBe(currentHash);
+      expect(expiresAt.getTime()).toBeGreaterThan(Date.now() + 59 * 24 * 60 * 60 * 1000);
+
+      expect(result.refreshToken).not.toBe('refresh-atual');
+      expect(authService.verifyToken(result.token)).toMatchObject({
+        sub: 'user-1',
+        sid: 'session-1',
+      });
+      expect(result.user.id).toBe('user-1');
+    });
+
+    it('retorna 400 sem refresh token', async () => {
+      await expect(authService.refresh('')).rejects.toMatchObject({ statusCode: 400 });
+    });
+
+    it('retorna 401 quando nenhuma sessão corresponde ao refresh token', async () => {
+      sessionRepository.findByRefreshTokenHash.mockResolvedValue(null);
+
+      await expect(authService.refresh('desconhecido')).rejects.toMatchObject({
+        statusCode: 401,
+      });
+    });
+
+    it('retorna 401 e remove a sessão quando ela já expirou', async () => {
+      sessionRepository.findByRefreshTokenHash.mockResolvedValue({
+        ...validSession(),
+        expiresAt: new Date(Date.now() - 1000),
+      });
+
+      await expect(authService.refresh('refresh-atual')).rejects.toMatchObject({
+        statusCode: 401,
+      });
+      expect(sessionRepository.deleteById).toHaveBeenCalledWith('session-1');
+      expect(sessionRepository.rotateRefreshToken).not.toHaveBeenCalled();
+    });
+
+    it('retorna 401 para sessão antiga sem expiração (criada antes do refresh token)', async () => {
+      sessionRepository.findByRefreshTokenHash.mockResolvedValue({
+        ...validSession(),
+        expiresAt: null,
+      });
+
+      await expect(authService.refresh('refresh-atual')).rejects.toMatchObject({
+        statusCode: 401,
+      });
+    });
+
+    it('retorna 401 quando outra requisição já rotacionou o mesmo refresh token', async () => {
+      sessionRepository.findByRefreshTokenHash.mockResolvedValue(validSession());
+      userRepository.findById.mockResolvedValue(buildUser());
+      sessionRepository.rotateRefreshToken.mockResolvedValue(false);
+
+      await expect(authService.refresh('refresh-atual')).rejects.toMatchObject({
+        statusCode: 401,
+      });
+    });
+
+    it('retorna 401 quando o usuário da sessão não existe mais', async () => {
+      sessionRepository.findByRefreshTokenHash.mockResolvedValue(validSession());
+      userRepository.findById.mockResolvedValue(null);
+
+      await expect(authService.refresh('refresh-atual')).rejects.toMatchObject({
+        statusCode: 401,
+      });
+    });
+  });
+
   describe('logout', () => {
     it('destrói a sessão correspondente ao sid do token', async () => {
       await authService.logout('session-1');
@@ -371,11 +510,11 @@ describe('AuthService', () => {
     it('atualiza a senha com token válido e encerra todas as sessões do usuário', async () => {
       userRepository.findByResetTokenHash.mockResolvedValue(buildUser());
 
-      await authService.resetPassword('token-valido', 'novaSenha123');
+      await authService.resetPassword('token-valido', 'NovaSenha@123');
 
       expect(userRepository.resetPassword).toHaveBeenCalledWith('user-1', expect.any(String));
       const newPasswordHash = userRepository.resetPassword.mock.calls[0][1];
-      expect(newPasswordHash).not.toBe('novaSenha123');
+      expect(newPasswordHash).not.toBe('NovaSenha@123');
       expect(sessionRepository.deleteAllByUserId).toHaveBeenCalledWith('user-1');
     });
 
@@ -383,7 +522,7 @@ describe('AuthService', () => {
       userRepository.findByResetTokenHash.mockResolvedValue(null);
 
       await expect(
-        authService.resetPassword('token-invalido', 'novaSenha123'),
+        authService.resetPassword('token-invalido', 'NovaSenha@123'),
       ).rejects.toMatchObject({
         statusCode: 400,
         message: 'Token inválido ou expirado',
@@ -393,10 +532,10 @@ describe('AuthService', () => {
       expect(sessionRepository.deleteAllByUserId).not.toHaveBeenCalled();
     });
 
-    it('retorna 400 quando a nova senha tem menos de 6 caracteres', async () => {
-      await expect(authService.resetPassword('token-valido', '123')).rejects.toMatchObject({
+    it('retorna 400 quando a nova senha não atende aos critérios de segurança', async () => {
+      await expect(authService.resetPassword('token-valido', 'senhafraca')).rejects.toMatchObject({
         statusCode: 400,
-        message: 'A senha deve ter no mínimo 6 caracteres',
+        message: 'A senha deve conter pelo menos uma letra maiúscula',
       });
 
       expect(userRepository.findByResetTokenHash).not.toHaveBeenCalled();

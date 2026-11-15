@@ -4,7 +4,7 @@ API do aplicativo Vagare, um app de planejamento de viagens. TCC de Engenharia d
 
 Stack: Node.js, Express, TypeScript, PostgreSQL, Prisma, JWT, Jest.
 
-CI/CD: lint, testes com cobertura mínima de 75% e análise de segurança (CodeQL) rodam em todo push/PR; o deploy em produção é manual, pelo workflow **Deploy** na aba Actions (`Run workflow`), e sempre publica a branch `main`.
+CI/CD: lint, testes com cobertura mínima de 75% e análise de segurança (CodeQL) rodam em todo push/PR; o deploy é **automático na `main`**: a cada push/merge na `main`, o workflow **Deploy** roda lint, build e testes e, se passarem, gera a imagem e publica em produção sem intervenção. Na `develop` o deploy é **manual**: aba Actions → **Deploy** → `Run workflow`, escolhendo a branch `develop` (também dá para republicar a `main` assim). Só `main` e `develop` podem ser publicadas. A senha do Postgres de produção vem do secret `POSTGRES_PASSWORD` do repositório (mín. 20 caracteres, só `A-Z a-z 0-9 _ -`; gere com `openssl rand -hex 32`); sem ele o deploy falha.
 
 ## Pré-requisitos
 
@@ -79,16 +79,21 @@ Para parar tudo: `docker compose down` (mantém os dados) ou `docker compose dow
 | POST | /auth/register | Cadastro local (nome, e-mail, senha) |
 | POST | /auth/login | Login local (e-mail, senha) |
 | POST | /auth/google | Login com Google (token do Google) |
+| POST | /auth/refresh | Renova o token a partir do refresh token |
 | POST | /auth/logout | Encerra a sessão do token atual |
+| POST | /auth/forgot-password | Envia e-mail com link para redefinir a senha |
+| POST | /auth/reset-password | Define nova senha a partir do token do e-mail |
 | GET | /health | Health check |
 
-Exemplo de cadastro:
+Exemplo de cadastro (a senha precisa ter 8+ caracteres, com maiúscula, minúscula, número e caractere especial):
 
 ```bash
 curl -X POST http://localhost:3000/auth/register \
   -H "Content-Type: application/json" \
-  -d '{"name":"Maria","email":"maria@example.com","password":"senha123"}'
+  -d '{"name":"Maria","email":"maria@example.com","password":"Senha@123"}'
 ```
+
+Contrato completo de cada endpoint: [docs/api-reference.md](docs/api-reference.md).
 
 Rotas autenticadas exigem o cabeçalho:
 

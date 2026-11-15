@@ -8,6 +8,7 @@ jest.mock('../src/config/prisma', () => ({
     session: {
       create: jest.fn(),
       findUnique: jest.fn(),
+      updateMany: jest.fn(),
       deleteMany: jest.fn(),
     },
   },
@@ -16,6 +17,7 @@ jest.mock('../src/config/prisma', () => ({
 const prismaSession = prisma.session as unknown as {
   create: jest.Mock;
   findUnique: jest.Mock;
+  updateMany: jest.Mock;
   deleteMany: jest.Mock;
 };
 
@@ -23,13 +25,14 @@ describe('SessionRepository', () => {
   const repository = new SessionRepository();
 
   describe('create', () => {
-    it('cria sessão vinculada ao userId', async () => {
+    it('cria sessão vinculada ao userId com hash do refresh token e expiração', async () => {
       prismaSession.create.mockResolvedValue({ id: 'session-1' });
+      const expiresAt = new Date('2027-01-01T00:00:00Z');
 
-      const result = await repository.create('user-1');
+      const result = await repository.create('user-1', 'hash-1', expiresAt);
 
       expect(prismaSession.create).toHaveBeenCalledWith({
-        data: { userId: 'user-1' },
+        data: { userId: 'user-1', refreshTokenHash: 'hash-1', expiresAt },
         select: { id: true },
       });
       expect(result).toEqual({ id: 'session-1' });
@@ -50,6 +53,42 @@ describe('SessionRepository', () => {
     });
   });
 
+  describe('findByRefreshTokenHash', () => {
+    it('busca a sessão pelo hash do refresh token', async () => {
+      const session = { id: 'session-1', userId: 'user-1', expiresAt: new Date() };
+      prismaSession.findUnique.mockResolvedValue(session);
+
+      await expect(repository.findByRefreshTokenHash('hash-1')).resolves.toEqual(session);
+      expect(prismaSession.findUnique).toHaveBeenCalledWith({
+        where: { refreshTokenHash: 'hash-1' },
+        select: { id: true, userId: true, expiresAt: true },
+      });
+    });
+  });
+
+  describe('rotateRefreshToken', () => {
+    it('troca o hash apenas se o atual ainda for o informado', async () => {
+      prismaSession.updateMany.mockResolvedValue({ count: 1 });
+      const expiresAt = new Date('2027-01-01T00:00:00Z');
+
+      await expect(
+        repository.rotateRefreshToken('session-1', 'hash-antigo', 'hash-novo', expiresAt),
+      ).resolves.toBe(true);
+      expect(prismaSession.updateMany).toHaveBeenCalledWith({
+        where: { id: 'session-1', refreshTokenHash: 'hash-antigo' },
+        data: { refreshTokenHash: 'hash-novo', expiresAt },
+      });
+    });
+
+    it('retorna false quando o refresh token já foi trocado por outra requisição', async () => {
+      prismaSession.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        repository.rotateRefreshToken('session-1', 'hash-antigo', 'hash-novo', new Date()),
+      ).resolves.toBe(false);
+    });
+  });
+
   describe('deleteById', () => {
     it('remove a sessão pelo id', async () => {
       prismaSession.deleteMany.mockResolvedValue({ count: 1 });
@@ -57,6 +96,24 @@ describe('SessionRepository', () => {
       await repository.deleteById('session-1');
 
       expect(prismaSession.deleteMany).toHaveBeenCalledWith({ where: { id: 'session-1' } });
+    });
+  });
+
+  describe('deleteExpiredByUserId', () => {
+    it('remove só as sessões do usuário já expiradas ou sem expiração', async () => {
+      prismaSession.deleteMany.mockResolvedValue({ count: 2 });
+      const before = Date.now();
+
+      await repository.deleteExpiredByUserId('user-1');
+
+      expect(prismaSession.deleteMany).toHaveBeenCalledWith({
+        where: {
+          userId: 'user-1',
+          OR: [{ expiresAt: { lte: expect.any(Date) } }, { expiresAt: null }],
+        },
+      });
+      const [{ where }] = prismaSession.deleteMany.mock.calls[0];
+      expect(where.OR[0].expiresAt.lte.getTime()).toBeGreaterThanOrEqual(before);
     });
   });
 });
