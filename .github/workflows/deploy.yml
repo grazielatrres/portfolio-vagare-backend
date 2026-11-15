@@ -204,13 +204,13 @@ jobs:
             # Confere se a API subiu antes de dar o deploy como concluído.
             PORT=$(grep -E '^PORT=' .env | cut -d= -f2 | tr -d '"' || true)
             for i in $(seq 1 30); do
-              if curl -fsS "http://localhost:${PORT:-3000}/health" > /dev/null; then
-                echo "API respondendo em /health"
+              if curl -fsS "http://localhost:${PORT:-3000}/health/ready" > /dev/null; then
+                echo "API e banco respondendo em /health/ready"
                 exit 0
               fi
               sleep 2
             done
-            echo "A API não respondeu em /health após 60s. Últimos logs:"
+            echo "A API não respondeu em /health/ready após 60s. Últimos logs:"
             docker compose -f docker-compose.prod.yml logs --tail 50 api
             exit 1
         env:
