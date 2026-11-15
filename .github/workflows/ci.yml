@@ -1,6 +1,7 @@
 name: CI
 
-# Só verifica o código (lint, testes e CodeQL). O deploy é manual: veja deploy.yml.
+# Verifica o código (lint, build, testes e CodeQL). Quando passa num push para a
+# main, dispara o deploy automático (deploy.yml); na develop o deploy é manual.
 on:
   push:
     branches: [main, develop]
@@ -33,6 +34,9 @@ jobs:
 
       - name: Lint
         run: npm run lint
+
+      - name: Build
+        run: npm run build
 
       - name: Test with coverage (fails below 75%)
         run: npm run test:coverage

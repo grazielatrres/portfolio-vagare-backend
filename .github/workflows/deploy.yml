@@ -1,9 +1,18 @@
 name: Deploy
 
-run-name: "Deploy produção (main) · ${{ github.actor }}"
+run-name: >-
+  Deploy produção (${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.ref_name }})
+  · ${{ github.event_name == 'workflow_run' && 'automático' || github.actor }}
 
-# Só roda pelo botão "Run workflow" na aba Actions. Sempre publica a branch main.
+# - main: automático. Roda sozinho quando o workflow CI termina com sucesso num
+#   push (inclui merge de PR) para a main — deploy contínuo, sem intervenção.
+# - develop: manual. Aba Actions → Deploy → "Run workflow", escolhendo a branch.
+#   O botão também serve para republicar a main. Outras branches são recusadas.
 on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
@@ -11,14 +20,48 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Decide qual branch/commit publicar. No automático usa exatamente o commit que
+  # passou no CI (head_sha), não o topo atual da main.
+  resolve:
+    name: Resolver branch e commit
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    outputs:
+      branch: ${{ steps.ref.outputs.branch }}
+      sha: ${{ steps.ref.outputs.sha }}
+    steps:
+      - name: Resolver ref
+        id: ref
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RUN_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+          DISPATCH_BRANCH: ${{ github.ref_name }}
+          DISPATCH_SHA: ${{ github.sha }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_run" ]; then
+            branch="$RUN_BRANCH"; sha="$RUN_SHA"
+          else
+            branch="$DISPATCH_BRANCH"; sha="$DISPATCH_SHA"
+          fi
+          case "$branch" in
+            main|develop) ;;
+            *) echo "::error::Só as branches main e develop podem ser publicadas (recebido: $branch)"; exit 1 ;;
+          esac
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
   checks:
-    name: Lint & Test (main)
+    name: Lint, Build & Test (${{ needs.resolve.outputs.branch }})
+    needs: resolve
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ needs.resolve.outputs.sha }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -35,27 +78,24 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Build
+        run: npm run build
+
       - name: Test with coverage (fails below 75%)
         run: npm run test:coverage
 
   build:
     name: Build da imagem (arm64)
-    needs: checks
+    needs: [resolve, checks]
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
-    outputs:
-      sha: ${{ steps.commit.outputs.sha }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: main
-
-      - name: Commit publicado
-        id: commit
-        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          ref: ${{ needs.resolve.outputs.sha }}
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -76,6 +116,7 @@ jobs:
 
       # A instância EC2 é t4g.micro (Graviton/ARM), por isso a imagem é
       # construída para linux/arm64 e não para a arquitetura do runner.
+      # A tag :latest só aponta para a main; a develop recebe apenas a tag do SHA.
       - name: Build and push image
         uses: docker/build-push-action@v6
         with:
@@ -83,22 +124,40 @@ jobs:
           platforms: linux/arm64
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}:latest
-            ghcr.io/${{ github.repository }}:${{ steps.commit.outputs.sha }}
+            ghcr.io/${{ github.repository }}:${{ needs.resolve.outputs.sha }}
+            ${{ needs.resolve.outputs.branch == 'main' && format('ghcr.io/{0}:latest', github.repository) || '' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
   deploy:
     name: Deploy na EC2
-    needs: build
+    needs: [resolve, build]
     runs-on: ubuntu-latest
-    # Ambiente do GitHub: permite exigir aprovação manual antes de publicar
-    # (Settings → Environments → production → Required reviewers).
+    # Não configure "Required reviewers" neste ambiente: isso faria o deploy da
+    # main esperar aprovação e deixaria de ser automático.
     environment: production
     permissions:
       contents: read
       packages: read
     steps:
+      # Falha antes de abrir a porta 22 se o secret estiver ausente ou fraco.
+      # Só letras, números, "_" e "-": a senha vai dentro da DATABASE_URL e de
+      # um comando SQL, e assim não precisa de escape em nenhum dos dois.
+      # Gere com: openssl rand -hex 32
+      - name: Validate POSTGRES_PASSWORD secret
+        env:
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+        run: |
+          case "$POSTGRES_PASSWORD" in
+            ''|*[!A-Za-z0-9_-]*)
+              echo "::error::Secret POSTGRES_PASSWORD ausente ou com caracteres não permitidos (use só A-Z, a-z, 0-9, _ e -)."
+              exit 1 ;;
+          esac
+          if [ "${#POSTGRES_PASSWORD}" -lt 20 ] || [ "$POSTGRES_PASSWORD" = "postgres" ]; then
+            echo "::error::Secret POSTGRES_PASSWORD precisa ter pelo menos 20 caracteres."
+            exit 1
+          fi
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -120,11 +179,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ needs.resolve.outputs.sha }}
 
       # O servidor não tem o repositório clonado: só a imagem chega lá via
-      # registry. O compose de produção precisa ser enviado a cada deploy
-      # para a EC2 sempre usar a versão da main.
+      # registry. O compose de produção é enviado a cada deploy para a EC2
+      # usar a versão do mesmo commit da imagem.
       - name: Copy docker-compose.prod.yml to EC2
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -140,21 +199,26 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          envs: GH_ACTOR,GH_TOKEN,EC2_APP_DIR
+          envs: GH_ACTOR,GH_TOKEN,EC2_APP_DIR,IMAGE_TAG,POSTGRES_PASSWORD
           script: |
             set -e
+            # Usados pelo docker-compose.prod.yml: imagem deste commit e senha do banco.
+            export IMAGE_TAG POSTGRES_PASSWORD
             echo "$GH_TOKEN" | docker login ghcr.io -u "$GH_ACTOR" --password-stdin
             cd "$EC2_APP_DIR"
             docker compose -f docker-compose.prod.yml pull
             docker compose -f docker-compose.prod.yml up -d
 
             # O Postgres só aplica POSTGRES_PASSWORD na primeira criação do
-            # volume. Se o volume foi criado com outra senha, a API falha ao
-            # autenticar. Este comando alinha a senha do volume com a do
-            # compose a cada deploy (o acesso local no container não pede
-            # senha, e rodar de novo não causa problema).
-            docker compose -f docker-compose.prod.yml exec -T postgres \
-              psql -U postgres -c "ALTER USER postgres WITH PASSWORD 'postgres';"
+            # volume. Se o volume foi criado com outra senha (ex.: a antiga
+            # "postgres"), a API falha ao autenticar. Este comando alinha a
+            # senha do volume com a do secret a cada deploy (o acesso local no
+            # container não pede senha, e rodar de novo não causa problema).
+            # O SQL vai pelo stdin (printf é builtin), então a senha não aparece
+            # na lista de processos; o formato dela já foi validado no runner.
+            printf "ALTER USER postgres WITH PASSWORD '%s';\n" "$POSTGRES_PASSWORD" \
+              | docker compose -f docker-compose.prod.yml exec -T postgres \
+                  psql -U postgres -v ON_ERROR_STOP=1 -q
             docker compose -f docker-compose.prod.yml restart api
 
             docker image prune -f
@@ -175,6 +239,8 @@ jobs:
           GH_ACTOR: ${{ github.actor }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           EC2_APP_DIR: ${{ secrets.EC2_APP_DIR }}
+          IMAGE_TAG: ${{ needs.resolve.outputs.sha }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
 
       # Revoga a regra mesmo se o deploy falhar, para a porta 22 nunca
       # ficar aberta ao mundo além da janela do deploy.
@@ -191,7 +257,7 @@ jobs:
           {
             echo "## Deploy produção ${{ job.status == 'success' && '✅' || '❌' }}"
             echo
-            echo "| Branch | Commit | Imagem |"
-            echo "|---|---|---|"
-            echo "| main | \`${{ needs.build.outputs.sha }}\` | \`ghcr.io/${{ github.repository }}:${{ needs.build.outputs.sha }}\` |"
+            echo "| Branch | Disparo | Commit | Imagem |"
+            echo "|---|---|---|---|"
+            echo "| ${{ needs.resolve.outputs.branch }} | ${{ github.event_name == 'workflow_run' && 'automático' || 'manual' }} | \`${{ needs.resolve.outputs.sha }}\` | \`ghcr.io/${{ github.repository }}:${{ needs.resolve.outputs.sha }}\` |"
           } >> "$GITHUB_STEP_SUMMARY"

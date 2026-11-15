@@ -5,7 +5,9 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      # Vem do secret POSTGRES_PASSWORD do GitHub (exportado pelo deploy.yml).
+      # Sem ele o compose falha em vez de subir com uma senha padrão.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD}
       POSTGRES_DB: vagare
     volumes:
       - vagare_pg_data:/var/lib/postgresql/data
@@ -16,7 +18,9 @@ services:
       retries: 10
 
   api:
-    image: ghcr.io/grazielatrres/portfolio-vagare-backend:latest
+    # IMAGE_TAG é o SHA do commit publicado, definido pelo workflow de deploy.
+    # Sem ele (ex.: comando manual no servidor), usa a última imagem da main.
+    image: ghcr.io/grazielatrres/portfolio-vagare-backend:${IMAGE_TAG:-latest}
     container_name: vagare-api
     restart: unless-stopped
     # Só em 127.0.0.1: o tráfego externo entra pelo nginx do host (HTTPS), que faz
@@ -28,7 +32,7 @@ services:
     env_file:
       - .env
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/vagare?schema=public
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD}@postgres:5432/vagare?schema=public
     depends_on:
       postgres:
         condition: service_healthy
