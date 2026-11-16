@@ -6,7 +6,7 @@ Stack: Node.js, Express, TypeScript, PostgreSQL, Prisma, JWT, Jest.
 
 Documentação completa (arquitetura C4, requisitos e rastreabilidade, decisões técnicas, CI/CD, observabilidade, guia de contribuição) na **[Wiki](https://github.com/grazielatrres/portfolio-vagare-backend/wiki)**.
 
-Monitoramento: erros inesperados vão para o Sentry (quando `SENTRY_DSN` está definido), cada requisição gera um log JSON no stdout e há dois health checks: `GET /health` (processo) e `GET /health/ready` (processo + banco).
+Monitoramento: erros inesperados e tracing vão para o projeto `vagare-backend` do Sentry (quando `SENTRY_DSN` está definido; em produção ele vem do secret `SENTRY_DSN` do repositório, e com o secret `SENTRY_AUTH_TOKEN` o deploy envia os source maps e registra o release), cada requisição gera um log JSON no stdout e há dois health checks: `GET /health` (processo) e `GET /health/ready` (processo + banco).
 
 CI/CD: lint, testes com cobertura mínima de 75%, análise de segurança (CodeQL) e análise estática no SonarCloud rodam em todo push/PR; o deploy é **automático na `main`**: a cada push/merge na `main`, o workflow **Deploy** roda lint, build e testes e, se passarem, gera a imagem e publica em produção sem intervenção. Na `develop` o deploy é **manual**: aba Actions → **Deploy** → `Run workflow`, escolhendo a branch `develop` (também dá para republicar a `main` assim). Só `main` e `develop` podem ser publicadas. A senha do Postgres de produção vem do secret `POSTGRES_PASSWORD` do repositório (mín. 20 caracteres, só `A-Z a-z 0-9 _ -`; gere com `openssl rand -hex 32`); sem ele o deploy falha.
 

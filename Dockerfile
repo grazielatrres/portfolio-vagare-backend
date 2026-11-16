@@ -8,6 +8,14 @@ RUN npx prisma generate
 COPY tsconfig.json ./
 COPY src ./src
 RUN npm run build
+# Grava um Debug ID em cada .js e .js.map para o Sentry ligar o erro ao source
+# map certo. Roda offline (não precisa de token) e o resultado é determinístico.
+RUN npx sentry-cli sourcemaps inject dist
+
+# Só o dist/ já com os Debug IDs. O deploy.yml exporta este estágio para enviar
+# ao Sentry exatamente os mesmos arquivos que vão na imagem. Não entra na imagem final.
+FROM scratch AS sourcemaps
+COPY --from=build /app/dist /
 
 FROM node:20-slim
 WORKDIR /app

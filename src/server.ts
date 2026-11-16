@@ -1,16 +1,11 @@
+// Tem que vir antes de qualquer outro import (ver src/instrument.ts).
+import './instrument';
 import { assertServerEnv, env } from './config/env';
-import {
-  captureError,
-  flushObservability,
-  initObservability,
-  isSentryEnabled,
-  log,
-} from './config/observability';
+import { captureError, flushObservability, isSentryEnabled, log } from './config/observability';
 import { createApp } from './app';
 import { prisma } from './config/prisma';
 
 async function bootstrap() {
-  initObservability();
   assertServerEnv();
   const app = createApp();
 

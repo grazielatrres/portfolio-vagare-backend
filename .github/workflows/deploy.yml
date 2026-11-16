@@ -73,6 +73,9 @@ jobs:
     permissions:
       contents: read
       packages: write
+    env:
+      # Só um booleano: o token em si fica restrito ao passo que o usa.
+      HAS_SENTRY_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN != '' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -109,6 +112,34 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # Source maps para o Sentry: exporta o estágio `sourcemaps` do Dockerfile
+      # (o dist/ da imagem, com Debug IDs). Sai todo do cache do passo anterior,
+      # então os arquivos são os mesmos da imagem publicada.
+      - name: Export dist for Sentry
+        if: env.HAS_SENTRY_TOKEN == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/arm64
+          target: sourcemaps
+          outputs: type=local,dest=sentry-dist
+          cache-from: type=gha
+
+      # Falha aqui não bloqueia o deploy: o Sentry continua recebendo os erros,
+      # só com a stack trace apontando para o JS compilado.
+      - name: Upload source maps to Sentry
+        if: env.HAS_SENTRY_TOKEN == 'true'
+        continue-on-error: true
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: vagare-app
+          SENTRY_PROJECT: vagare-backend
+          SENTRY_RELEASE: ${{ github.sha }}
+        # Mesma versão do @sentry/cli do package.json.
+        run: |
+          npx --yes @sentry/cli@3.8.2 releases new "$SENTRY_RELEASE"
+          npx --yes @sentry/cli@3.8.2 sourcemaps upload --release "$SENTRY_RELEASE" sentry-dist
+
   deploy:
     name: Deploy na EC2
     needs: build
@@ -119,6 +150,8 @@ jobs:
     permissions:
       contents: read
       packages: read
+    env:
+      HAS_SENTRY_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN != '' }}
     steps:
       # Falha antes de abrir a porta 22 se o secret estiver ausente ou fraco.
       # Só letras, números, "_" e "-": a senha vai dentro da DATABASE_URL e de
@@ -177,11 +210,12 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          envs: GH_ACTOR,GH_TOKEN,EC2_APP_DIR,IMAGE_TAG,POSTGRES_PASSWORD
+          envs: GH_ACTOR,GH_TOKEN,EC2_APP_DIR,IMAGE_TAG,POSTGRES_PASSWORD,SENTRY_DSN
           script: |
             set -e
-            # Usados pelo docker-compose.prod.yml: imagem deste commit e senha do banco.
-            export IMAGE_TAG POSTGRES_PASSWORD
+            # Usados pelo docker-compose.prod.yml: imagem deste commit, senha do
+            # banco e DSN do Sentry (vazio = Sentry desligado).
+            export IMAGE_TAG POSTGRES_PASSWORD SENTRY_DSN
             echo "$GH_TOKEN" | docker login ghcr.io -u "$GH_ACTOR" --password-stdin
             cd "$EC2_APP_DIR"
             docker compose -f docker-compose.prod.yml pull
@@ -219,6 +253,7 @@ jobs:
           EC2_APP_DIR: ${{ secrets.EC2_APP_DIR }}
           IMAGE_TAG: ${{ github.sha }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
 
       # Revoga a regra mesmo se o deploy falhar, para a porta 22 nunca
       # ficar aberta ao mundo além da janela do deploy.
@@ -228,6 +263,20 @@ jobs:
           aws ec2 revoke-security-group-ingress \
             --group-id ${{ secrets.EC2_SECURITY_GROUP_ID }} \
             --protocol tcp --port 22 --cidr "${{ env.RUNNER_IP }}/32"
+
+      # Marca no Sentry que este commit está em produção (só depois do
+      # /health/ready responder). Não bloqueia: o deploy já terminou.
+      - name: Register deploy in Sentry
+        if: success() && env.HAS_SENTRY_TOKEN == 'true'
+        continue-on-error: true
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: vagare-app
+          SENTRY_PROJECT: vagare-backend
+          SENTRY_RELEASE: ${{ github.sha }}
+        run: |
+          npx --yes @sentry/cli@3.8.2 releases finalize "$SENTRY_RELEASE"
+          npx --yes @sentry/cli@3.8.2 deploys new --release "$SENTRY_RELEASE" --env production
 
       - name: Resumo
         if: always()
