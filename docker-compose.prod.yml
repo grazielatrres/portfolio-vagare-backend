@@ -33,6 +33,9 @@ services:
       - .env
     environment:
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD}@postgres:5432/vagare?schema=public
+      # Vem do secret SENTRY_DSN do GitHub (exportado pelo deploy.yml) e tem
+      # prioridade sobre o .env. Vazio = Sentry desligado, a API sobe normalmente.
+      SENTRY_DSN: ${SENTRY_DSN:-}
       # Versão reportada ao Sentry: o SHA do commit publicado.
       SENTRY_RELEASE: ${IMAGE_TAG:-latest}
     # Rotação dos logs JSON do container (o disco da t4g.micro é pequeno).
