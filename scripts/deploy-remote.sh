@@ -21,7 +21,7 @@ POSTGRES_PASSWORD=$(param POSTGRES_PASSWORD)
 # "-" = secret SENTRY_DSN não definido no GitHub (o Parameter Store não aceita
 # valor vazio). Vazio = Sentry desligado.
 SENTRY_DSN=$(param SENTRY_DSN)
-if [ "$SENTRY_DSN" = "-" ]; then SENTRY_DSN=""; fi
+if [[ "$SENTRY_DSN" == "-" ]]; then SENTRY_DSN=""; fi
 
 # Usados pelo docker-compose.prod.yml: imagem deste commit, senha do banco e DSN.
 export IMAGE_TAG POSTGRES_PASSWORD SENTRY_DSN

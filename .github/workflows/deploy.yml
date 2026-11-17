@@ -55,7 +55,7 @@ jobs:
         run: npm ci
 
       - name: Generate Prisma Client
-        run: npx prisma generate
+        run: ./node_modules/.bin/prisma generate
 
       - name: Lint
         run: npm run lint
@@ -101,7 +101,7 @@ jobs:
       # construída para linux/arm64 e não para a arquitetura do runner.
       # A tag :latest só aponta para a main; a develop recebe apenas a tag do SHA.
       - name: Build and push image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
           platforms: linux/arm64
@@ -117,7 +117,7 @@ jobs:
       # então os arquivos são os mesmos da imagem publicada.
       - name: Export dist for Sentry
         if: env.HAS_SENTRY_TOKEN == 'true'
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
           platforms: linux/arm64
@@ -135,10 +135,13 @@ jobs:
           SENTRY_ORG: vagare-app
           SENTRY_PROJECT: vagare-backend
           SENTRY_RELEASE: ${{ github.sha }}
-        # Mesma versão do @sentry/cli do package.json.
+        # O @sentry/cli vem do package-lock (versão e hash travados), instalado
+        # sem rodar scripts de pacotes: o binário chega pelo pacote opcional da
+        # plataforma (@sentry/cli-linux-x64), sem download na hora.
         run: |
-          npx --yes @sentry/cli@3.8.2 releases new "$SENTRY_RELEASE"
-          npx --yes @sentry/cli@3.8.2 sourcemaps upload --release "$SENTRY_RELEASE" sentry-dist
+          npm ci --ignore-scripts --no-audit --no-fund
+          ./node_modules/.bin/sentry-cli releases new "$SENTRY_RELEASE"
+          ./node_modules/.bin/sentry-cli sourcemaps upload --release "$SENTRY_RELEASE" sentry-dist
 
   deploy:
     name: Deploy na EC2
@@ -261,9 +264,11 @@ jobs:
           SENTRY_ORG: vagare-app
           SENTRY_PROJECT: vagare-backend
           SENTRY_RELEASE: ${{ github.sha }}
+        # Mesmo esquema do upload de source maps: CLI do package-lock, sem scripts.
         run: |
-          npx --yes @sentry/cli@3.8.2 releases finalize "$SENTRY_RELEASE"
-          npx --yes @sentry/cli@3.8.2 deploys new --release "$SENTRY_RELEASE" --env production
+          npm ci --ignore-scripts --no-audit --no-fund
+          ./node_modules/.bin/sentry-cli releases finalize "$SENTRY_RELEASE"
+          ./node_modules/.bin/sentry-cli deploys new --release "$SENTRY_RELEASE" --env production
 
       - name: Resumo
         if: always()

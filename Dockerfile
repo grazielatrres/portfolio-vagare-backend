@@ -4,13 +4,14 @@ RUN apt-get update -y && apt-get install -y --no-install-recommends openssl && r
 COPY package*.json ./
 RUN npm ci
 COPY prisma ./prisma
-RUN npx prisma generate
+RUN ./node_modules/.bin/prisma generate
 COPY tsconfig.json ./
 COPY src ./src
 RUN npm run build
 # Grava um Debug ID em cada .js e .js.map para o Sentry ligar o erro ao source
 # map certo. Roda offline (não precisa de token) e o resultado é determinístico.
-RUN npx sentry-cli sourcemaps inject dist
+# Usa o @sentry/cli já instalado pelo npm ci (versão do package-lock), sem npx.
+RUN ./node_modules/.bin/sentry-cli sourcemaps inject dist
 
 # Só o dist/ já com os Debug IDs. O deploy.yml exporta este estágio para enviar
 # ao Sentry exatamente os mesmos arquivos que vão na imagem. Não entra na imagem final.
@@ -27,4 +28,4 @@ COPY --from=build /app/dist ./dist
 COPY package*.json ./
 COPY prisma ./prisma
 EXPOSE 3000
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/server.js"]
+CMD ["sh", "-c", "./node_modules/.bin/prisma migrate deploy && node dist/server.js"]
