@@ -16,6 +16,11 @@ export const env = {
   mailFromName: process.env.MAIL_FROM_NAME ?? 'Vagare',
   resetPasswordUrl: process.env.RESET_PASSWORD_URL ?? 'vagareapp://reset-password',
   openWeatherApiKey: process.env.OPENWEATHER_API_KEY ?? '',
+  // Observabilidade (Sentry). Sem SENTRY_DSN o envio fica desligado.
+  sentryDsn: process.env.SENTRY_DSN ?? '',
+  sentryTracesSampleRate: Number(process.env.SENTRY_TRACES_SAMPLE_RATE || 0.1),
+  // SHA do commit publicado (o deploy define IMAGE_TAG -> SENTRY_RELEASE).
+  release: process.env.SENTRY_RELEASE || undefined,
 };
 
 export function assertServerEnv(): void {

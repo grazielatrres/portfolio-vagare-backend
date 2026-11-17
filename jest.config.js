@@ -5,7 +5,7 @@ module.exports = {
   testMatch: ['**/*.test.ts'],
   setupFiles: ['<rootDir>/tests/setup.ts'],
   clearMocks: true,
-  collectCoverageFrom: ['src/**/*.ts', '!src/server.ts'],
+  collectCoverageFrom: ['src/**/*.ts', '!src/server.ts', '!src/instrument.ts'],
   coverageThreshold: {
     global: {
       branches: 75,

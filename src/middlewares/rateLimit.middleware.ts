@@ -1,10 +1,24 @@
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 
 export const LOGIN_RATE_LIMIT_MAX_FAILURES = 10;
+export const API_RATE_LIMIT_MAX = 300;
 
-// Conta só tentativas que falharam e usa IP + e-mail como chave: em redes móveis
-// muitos usuários compartilham o mesmo IP (CGNAT), e limitar só por IP faria os
-// erros de uma pessoa bloquearem as outras.
+export const apiRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: API_RATE_LIMIT_MAX,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Muitas requisições. Tente novamente em instantes.' },
+});
+
+export const authRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 50,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Muitas solicitações. Tente novamente mais tarde.' },
+});
+
 export const loginRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: LOGIN_RATE_LIMIT_MAX_FAILURES,
