@@ -153,7 +153,7 @@ jobs:
     env:
       HAS_SENTRY_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN != '' }}
     steps:
-      # Falha antes de abrir a porta 22 se o secret estiver ausente ou fraco.
+      # Falha antes de qualquer acesso à AWS se o secret estiver ausente ou fraco.
       # Só letras, números, "_" e "-": a senha vai dentro da DATABASE_URL e de
       # um comando SQL, e assim não precisa de escape em nenhum dos dois.
       # Gere com: openssl rand -hex 32
@@ -178,91 +178,78 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-2
 
-      # O Security Group da EC2 só libera a porta 22 para o IP fixo do
-      # desenvolvedor. Como os runners do GitHub Actions usam IPs dinâmicos,
-      # este passo libera, só pela duração do deploy, o IP do runner atual.
-      - name: Allow this runner's IP on port 22
-        run: |
-          RUNNER_IP=$(curl -s https://checkip.amazonaws.com)
-          echo "RUNNER_IP=${RUNNER_IP}" >> "$GITHUB_ENV"
-          aws ec2 authorize-security-group-ingress \
-            --group-id ${{ secrets.EC2_SECURITY_GROUP_ID }} \
-            --protocol tcp --port 22 --cidr "${RUNNER_IP}/32"
-
       - name: Checkout
         uses: actions/checkout@v4
 
-      # O servidor não tem o repositório clonado: só a imagem chega lá via
-      # registry. O compose de produção é enviado a cada deploy para a EC2
-      # usar a versão do mesmo commit da imagem.
-      - name: Copy docker-compose.prod.yml to EC2
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          source: docker-compose.prod.yml
-          target: ${{ secrets.EC2_APP_DIR }}
-
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          envs: GH_ACTOR,GH_TOKEN,EC2_APP_DIR,IMAGE_TAG,POSTGRES_PASSWORD,SENTRY_DSN
-          script: |
-            set -e
-            # Usados pelo docker-compose.prod.yml: imagem deste commit, senha do
-            # banco e DSN do Sentry (vazio = Sentry desligado).
-            export IMAGE_TAG POSTGRES_PASSWORD SENTRY_DSN
-            echo "$GH_TOKEN" | docker login ghcr.io -u "$GH_ACTOR" --password-stdin
-            cd "$EC2_APP_DIR"
-            docker compose -f docker-compose.prod.yml pull
-            docker compose -f docker-compose.prod.yml up -d
-
-            # O Postgres só aplica POSTGRES_PASSWORD na primeira criação do
-            # volume. Se o volume foi criado com outra senha (ex.: a antiga
-            # "postgres"), a API falha ao autenticar. Este comando alinha a
-            # senha do volume com a do secret a cada deploy (o acesso local no
-            # container não pede senha, e rodar de novo não causa problema).
-            # O SQL vai pelo stdin (printf é builtin), então a senha não aparece
-            # na lista de processos; o formato dela já foi validado no runner.
-            printf "ALTER USER postgres WITH PASSWORD '%s';\n" "$POSTGRES_PASSWORD" \
-              | docker compose -f docker-compose.prod.yml exec -T postgres \
-                  psql -U postgres -v ON_ERROR_STOP=1 -q
-            docker compose -f docker-compose.prod.yml restart api
-
-            docker image prune -f
-
-            # Confere se a API subiu antes de dar o deploy como concluído.
-            PORT=$(grep -E '^PORT=' .env | cut -d= -f2 | tr -d '"' || true)
-            for i in $(seq 1 30); do
-              if curl -fsS "http://localhost:${PORT:-3000}/health/ready" > /dev/null; then
-                echo "API e banco respondendo em /health/ready"
-                exit 0
-              fi
-              sleep 2
-            done
-            echo "A API não respondeu em /health/ready após 60s. Últimos logs:"
-            docker compose -f docker-compose.prod.yml logs --tail 50 api
-            exit 1
+      # O deploy não usa SSH: o comando vai pelo AWS Systems Manager (SSM) e a
+      # porta 22 nem precisa ser aberta. Os segredos vão antes para o Parameter
+      # Store, cifrados (SecureString), e a EC2 os lê com a própria role; assim
+      # não aparecem no histórico de comandos do SSM. O GHCR_TOKEN é o token
+      # deste job e expira quando ele termina.
+      - name: Store deploy secrets in Parameter Store
         env:
-          GH_ACTOR: ${{ github.actor }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          EC2_APP_DIR: ${{ secrets.EC2_APP_DIR }}
-          IMAGE_TAG: ${{ github.sha }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
-
-      # Revoga a regra mesmo se o deploy falhar, para a porta 22 nunca
-      # ficar aberta ao mundo além da janela do deploy.
-      - name: Revoke this runner's IP from port 22
-        if: always() && env.RUNNER_IP != ''
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          aws ec2 revoke-security-group-ingress \
-            --group-id ${{ secrets.EC2_SECURITY_GROUP_ID }} \
-            --protocol tcp --port 22 --cidr "${{ env.RUNNER_IP }}/32"
+          put() {
+            aws ssm put-parameter --cli-input-json "$(jq -n --arg n "/vagare/prod/$1" --arg v "$2" \
+              '{Name: $n, Value: $v, Type: "SecureString", Overwrite: true}')" > /dev/null
+          }
+          put POSTGRES_PASSWORD "$POSTGRES_PASSWORD"
+          put GHCR_TOKEN "$GHCR_TOKEN"
+          # O Parameter Store não aceita valor vazio: "-" = Sentry desligado.
+          put SENTRY_DSN "${SENTRY_DSN:--}"
+
+      # O servidor não tem o repositório clonado: só a imagem chega lá via
+      # registry. O compose de produção e o script de deploy vão dentro do
+      # comando (em base64), então a EC2 usa a versão do mesmo commit da imagem.
+      - name: Deploy via SSM Run Command
+        env:
+          APP_DIR: ${{ secrets.EC2_APP_DIR }}
+          IMAGE_TAG: ${{ github.sha }}
+          GH_ACTOR: ${{ github.actor }}
+        run: |
+          INSTANCE_ID=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values=vagare-backend" "Name=instance-state-name,Values=running" \
+            --query 'Reservations[0].Instances[0].InstanceId' --output text)
+          if [ -z "$INSTANCE_ID" ] || [ "$INSTANCE_ID" = "None" ]; then
+            echo "::error::Instância vagare-backend não encontrada em execução."
+            exit 1
+          fi
+
+          COMPOSE_B64=$(base64 -w0 docker-compose.prod.yml)
+          SCRIPT_B64=$(base64 -w0 scripts/deploy-remote.sh)
+          PARAMS=$(jq -n --arg dir "$APP_DIR" --arg tag "$IMAGE_TAG" --arg actor "$GH_ACTOR" \
+            --arg region "$AWS_REGION" --arg compose "$COMPOSE_B64" --arg script "$SCRIPT_B64" \
+            '{commands: [
+               "set -e",
+               "echo \($compose) | base64 -d > \($dir | @sh)/docker-compose.prod.yml",
+               "echo \($script) | base64 -d | APP_DIR=\($dir | @sh) IMAGE_TAG=\($tag | @sh) GH_ACTOR=\($actor | @sh) AWS_REGION=\($region | @sh) bash"
+             ],
+             executionTimeout: ["600"]}')
+
+          COMMAND_ID=$(aws ssm send-command --instance-ids "$INSTANCE_ID" \
+            --document-name AWS-RunShellScript --comment "Deploy $IMAGE_TAG" \
+            --parameters "$PARAMS" --query 'Command.CommandId' --output text)
+          echo "Comando SSM: $COMMAND_ID"
+
+          STATUS=Pending
+          for _ in $(seq 1 130); do
+            sleep 5
+            STATUS=$(aws ssm get-command-invocation --command-id "$COMMAND_ID" \
+              --instance-id "$INSTANCE_ID" --query 'Status' --output text 2>/dev/null || echo Pending)
+            case "$STATUS" in Pending|InProgress|Delayed) ;; *) break ;; esac
+          done
+
+          echo "::group::Saída do deploy na EC2"
+          aws ssm get-command-invocation --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" \
+            --query '[StandardOutputContent, StandardErrorContent]' --output text
+          echo "::endgroup::"
+          if [ "$STATUS" != "Success" ]; then
+            echo "::error::Deploy na EC2 terminou com status $STATUS."
+            exit 1
+          fi
 
       # Marca no Sentry que este commit está em produção (só depois do
       # /health/ready responder). Não bloqueia: o deploy já terminou.
